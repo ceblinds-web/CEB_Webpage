@@ -1,0 +1,21 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ink: #1C1C1E;
+  --cream: #F7F4EF;
+  --gold: #C9A84C;
+  --gold-lt: #E8C96B;
+  --gold-dk: #8B6914;
+  --slate: #4A5568;
+  --slate-lt: #9AA5B4;
+  --line: #E2DDD6;
+  --green: #27AE60;
+  --red: #E53E3E;
+  --violet: #7C3AED;
+}
+
+body { background: var(--cream); color: var(--ink); }
+.font-display { font-family: 'Playfair Display', serif; }
