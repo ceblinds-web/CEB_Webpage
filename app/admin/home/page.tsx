@@ -37,6 +37,12 @@ export default function ProjectHome() {
     router.push(`/admin/project/${newProj.id}`)
   }
 
+  const deleteProject = async (projId: string, projName: string) => {
+    if (!confirm(`Delete project "${projName}"? This cannot be undone.`)) return
+    await fetch(`/api/projects/${projId}`, { method:'DELETE' })
+    load()
+  }
+
   const allProjects = customers.flatMap(c=>(c.projects||[]).map((p:any)=>({...p,customerName:c.name}))).sort((a,b)=>new Date(b.created_at||0).getTime()-new Date(a.created_at||0).getTime())
 
   return (
@@ -45,7 +51,7 @@ export default function ProjectHome() {
       <aside style={{width:272,background:'#1C1C1E',display:'flex',flexDirection:'column',flexShrink:0,overflowY:'auto'}}>
         <div style={{padding:'14px 14px 10px',borderBottom:'1px solid rgba(255,255,255,.08)'}}>
           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
-            <div style={{width:28,height:28,background:'#C9A84C',borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13}}>🪟</div>
+            <img src="/ceb-logo.jpg" alt="CEB" style={{width:32,height:32,borderRadius:'50%',objectFit:'cover',border:'1px solid rgba(201,168,76,.4)'}}/>
             <span style={{fontFamily:'Playfair Display,serif',fontSize:14,color:'#fff'}}>Project Home</span>
           </div>
           <div style={{display:'flex',gap:8}}>
@@ -79,11 +85,14 @@ export default function ProjectHome() {
                 {isExp && (
                   <div style={{paddingLeft:20,paddingBottom:4}}>
                     {c.projects?.map((p:any)=>(
-                      <div key={p.id} onClick={()=>router.push(`/admin/project/${p.id}`)}
-                        style={{display:'flex',alignItems:'center',gap:5,padding:'5px 8px',borderRadius:5,cursor:'pointer',color:'rgba(255,255,255,.5)',fontSize:11,marginBottom:1}}>
-                        <span style={{fontSize:10,flexShrink:0}}>📋</span>
-                        <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
-                        <span style={{fontSize:8,fontWeight:700,padding:'1px 5px',borderRadius:6,background:'rgba(255,255,255,.08)',color:statusColor[p.status]||'#E8C96B',flexShrink:0}}>{p.status}</span>
+                      <div key={p.id} style={{display:'flex',alignItems:'center',gap:5,padding:'5px 8px',borderRadius:5,fontSize:11,marginBottom:1}}>
+                        <span onClick={()=>router.push(`/admin/project/${p.id}`)} style={{display:'flex',alignItems:'center',gap:5,flex:1,cursor:'pointer',color:'rgba(255,255,255,.5)'}}>
+                          <span style={{fontSize:10,flexShrink:0}}>📋</span>
+                          <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
+                          <span style={{fontSize:8,fontWeight:700,padding:'1px 5px',borderRadius:6,background:'rgba(255,255,255,.08)',color:statusColor[p.status]||'#E8C96B',flexShrink:0}}>{p.status}</span>
+                        </span>
+                        <button onClick={()=>deleteProject(p.id, p.name)} title="Delete project"
+                          style={{background:'none',border:'none',color:'rgba(239,68,68,.5)',cursor:'pointer',fontSize:11,padding:'1px 3px',flexShrink:0,lineHeight:1}}>✕</button>
                       </div>
                     ))}
                     {!c.projects?.length && !qf.open && (
@@ -157,6 +166,9 @@ export default function ProjectHome() {
                     </div>
                     <span style={{fontSize:9,fontWeight:700,padding:'3px 9px',borderRadius:10,background:statusColor[p.status]||'#FEF3C7',color:'#1C1C1E',flexShrink:0}}>{p.status}</span>
                     <span style={{color:'#C9A84C',fontSize:13}}>→</span>
+                    <button onClick={e=>{e.preventDefault();deleteProject(p.id,p.name)}} title="Delete"
+                      style={{background:'none',border:'none',color:'#FCA5A5',cursor:'pointer',fontSize:13,padding:'2px 6px',borderRadius:4,flexShrink:0}}
+                      onMouseEnter={e=>(e.currentTarget.style.color='#E53E3E')} onMouseLeave={e=>(e.currentTarget.style.color='#FCA5A5')}>✕</button>
                   </a>
                 ))}
               </div>
