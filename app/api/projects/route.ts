@@ -7,9 +7,12 @@ export async function POST(req: Request) {
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
 
   const body = await req.json()
-  const { customerId, name, email, phone, address, property_type } = body
+  // Different pages in this codebase send this two different ways — accept both
+  // rather than forcing every caller onto one convention.
+  const customerId = body.customerId || body.customer_id
+  const { name, email, phone, address, property_type } = body
   if (!customerId || !name || !email) {
-    return NextResponse.json({ error: 'customerId, name and email are required' }, { status: 400 })
+    return NextResponse.json({ error: 'customer (customerId or customer_id), name and email are required' }, { status: 400 })
   }
 
   const supabase = createAdminClient()

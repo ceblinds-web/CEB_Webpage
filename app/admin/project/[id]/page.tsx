@@ -7,6 +7,11 @@ const MOUNTS = ['Inside','Outside']
 const VALANCES = ['—','Standard','Deluxe','Hidden','Corniced']
 const BRAILS = ['—','Standard','Weighted','Decorative']
 const FABRICS_DEFAULT = ['YX2501','YX2501 + YX2509','M1001-1','Standard','Blackout','Solar 3%','Solar 5%','Natural','Custom']
+// Matches the status color-coding already used in /admin/home's sidebar, so a
+// project's status reads the same way in both places.
+const SIDEBAR_STATUS_COLOR: Record<string,string> = {
+  draft:'#E8C96B', sent:'#93C5FD', viewed:'#D8B4FE', confirmed:'#5EEAD4', invoiced:'#FCD34D', completed:'#6EE7A0', cancelled:'#FCA5A5'
+}
 const OPTIONAL_COLS = [
   { key:'fabric', label:'Fabric' },
   { key:'valance', label:'Valance' },
@@ -78,6 +83,7 @@ export default function AdminProjectPage() {
   const [newProjAddress, setNewProjAddress] = useState('')
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set())
   const [showColsMenu, setShowColsMenu] = useState(false)
+  const [accepting, setAccepting] = useState(false)
   const [showNewCustomer, setShowNewCustomer] = useState(false)
   const [newCustName, setNewCustName] = useState('')
   const [newCustEmail, setNewCustEmail] = useState('')
@@ -121,7 +127,11 @@ export default function AdminProjectPage() {
   }
   useEffect(loadAll, [id])
 
-  const sqm = (w:any,h:any) => parseFloat(w||0)*parseFloat(h||0)*CONV
+  const rawSqm = (w:any,h:any) => parseFloat(w||0)*parseFloat(h||0)*CONV
+  // Minimum billable area is 1 sq.m — a window that computes smaller than that
+  // still bills (and displays) as 1 sq.m. Only applies once real dimensions are
+  // entered; an empty/zero row still shows as empty, not forced to 1.
+  const sqm = (w:any,h:any) => { const s = rawSqm(w,h); return s>0 ? Math.max(1,s) : 0 }
   const getProd = (type:string) => products.find(p=>p.name===type)||{my_cost_per_sqm:16, factor:5}
   const getMtr = (ctrl:string) => motors.find(m=>m.name===ctrl)||{my_cost_per_unit:0, factor:1}
   const blindsQ = (r:Row) => { const p=getProd(r.blind_type); return Math.round(sqm(r.width_in,r.height_in)*p.my_cost_per_sqm*p.factor*100)/100*(r.qty||1) }
@@ -147,6 +157,7 @@ export default function AdminProjectPage() {
   const dataRows = rows.filter(r=>!r.is_section)
   const totB = dataRows.reduce((s,r)=>s+blindsQ(r),0)
   const totM = dataRows.reduce((s,r)=>s+motorQ(r),0)
+  const totSqm = dataRows.reduce((s,r)=>s+sqm(r.width_in,r.height_in)*(parseInt(String(r.qty))||1),0)
   const totCost = dataRows.reduce((s,r)=>s+blindsCost(r)+motorCost(r),0)
   const sub = (totB+totM)*(1-config.discount_pct/100)
   const ship = sub*(config.shipping_pct/100)
@@ -165,6 +176,43 @@ export default function AdminProjectPage() {
     setRows(prev=>[...prev, { id:lid, is_section:false, blind_type:products[0]?.name||'HoneyComb', control:motors[0]?.name||'Cordless', location:'', fabric:FABRICS_DEFAULT[0], valance:'—', bottom_rail:'—', mount:'Inside', width_in:'', height_in:'', qty:1, remark:'' }])
     setSelId(lid)
     setTimeout(()=>{ document.querySelector('.sheet-scroll')?.scrollTo({top:99999, behavior:'smooth'}) }, 50)
+  }
+  // Inserts a new row immediately AFTER a specific row, instead of always at the
+  // very bottom -- used by Enter-to-add-row so it works from any row, not just
+  // the last one.
+  const addRowAfter = (afterId:string) => {
+    const lid = newLocalId()
+    const newRow: Row = { id:lid, is_section:false, blind_type:products[0]?.name||'HoneyComb', control:motors[0]?.name||'Cordless', location:'', fabric:FABRICS_DEFAULT[0], valance:'—', bottom_rail:'—', mount:'Inside', width_in:'', height_in:'', qty:1, remark:'' }
+    setRows(prev=>{
+      const idx = prev.findIndex(r=>r.id===afterId)
+      if (idx===-1) return [...prev, newRow]
+      const next=[...prev]; next.splice(idx+1,0,newRow); return next
+    })
+    setSelId(lid)
+  }
+  // Drag-to-reorder: the small handle next to each row's # is the only
+  // draggable element, so you can't accidentally drag by clicking elsewhere
+  // in the row (which is still used for row selection).
+  const [dragRowId, setDragRowId] = useState<string|null>(null)
+  const [dragOverRowId, setDragOverRowId] = useState<string|null>(null)
+  const reorderRow = (draggedId:string, targetId:string) => {
+    if (draggedId===targetId) return
+    setRows(prev=>{
+      const draggedIdx = prev.findIndex(r=>r.id===draggedId)
+      const targetIdx = prev.findIndex(r=>r.id===targetId)
+      if (draggedIdx===-1 || targetIdx===-1) return prev
+      const next=[...prev]
+      const [item] = next.splice(draggedIdx,1)
+      const insertAt = next.findIndex(r=>r.id===targetId)
+      next.splice(insertAt,0,item)
+      return next
+    })
+    markDirty()
+  }
+  const deleteSection = (rowId:string) => {
+    if (!confirm('Delete this section heading? Rows under it are kept, just ungrouped.')) return
+    setRows(prev=>prev.filter(r=>r.id!==rowId))
+    markDirty()
   }
   const [addingSection, setAddingSection] = useState(false)
   const [newSectionName, setNewSectionName] = useState('')
@@ -330,6 +378,21 @@ export default function AdminProjectPage() {
     } finally {
       setPushing(false)
     }
+  }
+
+  const acceptOnBehalf = async () => {
+    setAccepting(true)
+    try {
+      const res = await fetch(`/api/projects/${id}/accept`, { method:'POST' })
+      const text = await res.text()
+      let data:any = {}
+      try { data = text?JSON.parse(text):{} } catch { showToast('Server returned an unexpected response','err'); return }
+      if (!res.ok) { showToast(data.error||'Could not accept','err'); return }
+      setProject((p:any)=>p?{...p, status:'confirmed', confirmed_at:data.confirmed_at}:p)
+      showToast('Marked accepted on customer\'s behalf','ok')
+    } catch (err:any) {
+      showToast('Network/JS error: '+err.message,'err')
+    } finally { setAccepting(false) }
   }
 
   const sendEmail = async () => {
@@ -651,11 +714,13 @@ export default function AdminProjectPage() {
   const thCust: React.CSSProperties = { ...th, background:'#EAF6EE' }
   const td: React.CSSProperties = { padding:0,borderRight:'1px solid #E2DDD6',verticalAlign:'middle',fontSize:12 }
 
-  // Handle Enter key on last input field to add new row
-  const handleKeyDown = (e: React.KeyboardEvent, isLastCol: boolean) => {
+  // Handle Enter key on the last editable field of a row -- adds a new row
+  // right after THIS row, regardless of which row you're on (previously only
+  // worked when you were on the very last row in the sheet).
+  const handleKeyDown = (e: React.KeyboardEvent, isLastCol: boolean, rowId?: string) => {
     if (e.key === 'Enter' && isLastCol) {
       e.preventDefault()
-      addRow()
+      if (rowId) addRowAfter(rowId); else addRow()
     }
   }
 
@@ -670,6 +735,14 @@ export default function AdminProjectPage() {
           <span style={{color:'#9AA5B4',fontSize:11}}>{project.customers?.name} · {project.address||project.email}</span>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
+          {project.confirmed_at ? (
+            <span style={{fontSize:11,color:'#6EE7A0'}}>✓ Accepted {new Date(project.confirmed_at).toLocaleDateString()}</span>
+          ) : !['confirmed','invoiced','completed','cancelled'].includes(project.status) && (
+            <button disabled={accepting} onClick={acceptOnBehalf} title="Use if the customer confirmed verbally or by text instead of clicking Accept themselves"
+              style={{border:'none',padding:'5px 12px',borderRadius:6,fontSize:11,fontWeight:700,cursor:'pointer',background:'#27AE60',color:'#fff'}}>
+              {accepting?'…':'✓ Accept on Customer\'s Behalf'}
+            </button>
+          )}
           <select value={project.status} onChange={async e=>{
             await fetch(`/api/projects/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:e.target.value})})
             setProject((p:any)=>({...p,status:e.target.value}))
@@ -712,7 +785,7 @@ export default function AdminProjectPage() {
                             fontSize:13,marginBottom:2}}>
                           <span style={{fontSize:13}}>📋</span>
                           <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
-                          <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:7,background:'rgba(201,168,76,.2)',color:'#E8C96B',flexShrink:0}}>{p.status}</span>
+                          <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:7,background:'rgba(255,255,255,.08)',color:SIDEBAR_STATUS_COLOR[p.status]||'#E8C96B',flexShrink:0}}>{p.status}</span>
                           <button onClick={e=>{e.stopPropagation();confirmOrAsk('proj:'+p.id,()=>deleteProjectFromSidebar(p.id,c.id,e))}} title="Delete project"
                             style={{background:pendingDelete==='proj:'+p.id?'#E53E3E':'none',border:'none',color:pendingDelete==='proj:'+p.id?'#fff':'#E53E3E',cursor:'pointer',fontSize:pendingDelete==='proj:'+p.id?9:12,fontWeight:pendingDelete==='proj:'+p.id?700:400,padding:pendingDelete==='proj:'+p.id?'1px 5px':'0 2px',borderRadius:4,opacity:1,flexShrink:0,whiteSpace:'nowrap'}}>{pendingDelete==='proj:'+p.id?'Confirm?':'✕'}</button>
                         </div>
@@ -833,7 +906,7 @@ export default function AdminProjectPage() {
               <table style={{borderCollapse:'collapse',minWidth:'100%',fontSize:12}}>
                 <thead>
                   <tr>
-                    <th style={{...th,width:34,background:'#E5E2DB',textAlign:'center'}}>#</th>
+                    <th style={{...th,width:48,background:'#E5E2DB',textAlign:'center'}}>#</th>
                     <th style={thCust}>Blind Type ✏</th>
                     <th style={thCust}>Control ✏</th>
                     <th style={th}>Location</th>
@@ -849,32 +922,57 @@ export default function AdminProjectPage() {
                     <th style={th}>Blinds $</th>
                     <th style={th}>Motors $</th>
                     <th style={th}>Line Total</th>
-                    <th style={{...th,width:30,textAlign:'center'}}></th>
+                    <th style={{...th,width:34,textAlign:'center'}}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((r,idx) => {
                     if (r.is_section) return (
-                      <tr key={r.id}><td colSpan={17-hiddenCols.size} style={{background:'#2A2826',color:'rgba(255,255,255,.75)',fontSize:10,fontWeight:700,letterSpacing:'1.2px',padding:'5px 12px'}}>▸ {r.section_name}</td></tr>
+                      <tr key={r.id}
+                        onDragOver={e=>{e.preventDefault(); if(dragRowId && dragOverRowId!==r.id) setDragOverRowId(r.id)}}
+                        onDragLeave={()=>setDragOverRowId(prev=>prev===r.id?null:prev)}
+                        onDrop={()=>{ if (dragRowId) reorderRow(dragRowId, r.id); setDragRowId(null); setDragOverRowId(null) }}
+                        style={dragOverRowId===r.id?{boxShadow:'inset 0 2px 0 #C9A84C, inset 0 -2px 0 #C9A84C'}:undefined}>
+                        <td colSpan={16-hiddenCols.size} style={{background:'#2A2826',color:'rgba(255,255,255,.75)',fontSize:10,fontWeight:700,letterSpacing:'1.2px',padding:'5px 12px'}}>▸ {r.section_name}</td>
+                        <td style={{background:'#2A2826',textAlign:'center',padding:'5px 4px'}}>
+                          <button tabIndex={-1} onClick={()=>deleteSection(r.id)} title="Delete this section heading"
+                            style={{background:'none',border:'none',color:'rgba(255,255,255,.4)',cursor:'pointer',fontSize:12}}>✕</button>
+                        </td>
+                      </tr>
                     )
                     const vi = rows.slice(0,idx).filter(x=>!x.is_section).length + 1
                     const sel = r.id===selId
-                    const isLastRow = idx === rows.length - 1
                     const bq=blindsQ(r), mq=motorQ(r), lt=lineTotal(r), sq=sqm(r.width_in,r.height_in)
                     const sel_ = (field:string, val:any, opts:string[], isLast=false) => (
-                      <select value={val} onChange={e=>upd(r.id,field,e.target.value)} onKeyDown={e=>handleKeyDown(e,isLast&&isLastRow)} style={{...inp,cursor:'pointer'}}>
+                      <select value={val} onChange={e=>upd(r.id,field,e.target.value)} onKeyDown={e=>handleKeyDown(e,isLast,r.id)} style={{...inp,cursor:'pointer'}}>
                         {opts.map(o=><option key={o} value={o}>{o}</option>)}
                       </select>
                     )
                     const txt_ = (field:string, val:any, isLast=false) => (
-                      <input type="text" value={val} onChange={e=>upd(r.id,field,e.target.value)} onKeyDown={e=>handleKeyDown(e,isLast&&isLastRow)} style={inp}/>
+                      <input type="text" value={val} onChange={e=>upd(r.id,field,e.target.value)} onKeyDown={e=>handleKeyDown(e,isLast,r.id)} style={inp}/>
                     )
                     const num_ = (field:string, val:any) => (
                       <input type="number" value={val} onChange={e=>upd(r.id,field,e.target.value)} step="0.01" style={{...inp,textAlign:'center'}}/>
                     )
                     return (
-                      <tr key={r.id} style={{borderBottom:'1px solid #E2DDD6',background:sel?'#FEF9EC':idx%2===0?'#fff':'#FAF8F5',cursor:'pointer'}} onClick={()=>setSelId(r.id)}>
-                        <td style={{...td,width:34,textAlign:'center',fontSize:10,color:sel?'#1C1C1E':'#9AA5B4',background:sel?'#C9A84C':'#F5F2EB',borderRight:'2px solid #E2DDD6'}}>{vi}</td>
+                      <tr key={r.id}
+                        onDragOver={e=>{e.preventDefault(); if(dragRowId && dragOverRowId!==r.id) setDragOverRowId(r.id)}}
+                        onDragLeave={()=>setDragOverRowId(prev=>prev===r.id?null:prev)}
+                        onDrop={()=>{ if (dragRowId) reorderRow(dragRowId, r.id); setDragRowId(null); setDragOverRowId(null) }}
+                        onDragEnd={()=>{ setDragRowId(null); setDragOverRowId(null) }}
+                        style={{borderBottom:'1px solid #E2DDD6',borderTop:dragOverRowId===r.id?'2px solid #C9A84C':undefined,background:sel?'#FEF9EC':idx%2===0?'#fff':'#FAF8F5',cursor:'pointer'}} onClick={()=>setSelId(r.id)}>
+                        <td style={{...td,width:48,textAlign:'center',fontSize:10,color:sel?'#1C1C1E':'#9AA5B4',background:sel?'#C9A84C':'#F5F2EB',borderRight:'2px solid #E2DDD6'}}>
+                          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>
+                            <span
+                              draggable
+                              onDragStart={e=>{ setDragRowId(r.id); e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', r.id) }}
+                              title="Drag to reorder"
+                              style={{cursor:'grab',color:sel?'#1C1C1E':'#9AA5B4',fontSize:13,lineHeight:1,letterSpacing:'-1px',padding:'2px 3px'}}
+                              onClick={e=>e.stopPropagation()}
+                            >☰</span>
+                            <span>{vi}</span>
+                          </div>
+                        </td>
                         <td style={{...td,background:'rgba(39,174,96,.03)'}}>{sel_('blind_type',r.blind_type,products.map(p=>p.name))}</td>
                         <td style={{...td,background:'rgba(39,174,96,.03)'}}>{sel_('control',r.control,motors.map(m=>m.name))}</td>
                         <td style={td}>{txt_('location',r.location)}</td>
@@ -884,15 +982,15 @@ export default function AdminProjectPage() {
                         {colVisible('mount') && <td style={{...td,background:'rgba(39,174,96,.03)'}}>{sel_('mount',r.mount,MOUNTS)}</td>}
                         <td style={td}>{num_('width_in',r.width_in)}</td>
                         <td style={td}>{num_('height_in',r.height_in)}</td>
-                        <td style={td}><input type="number" value={r.qty} onChange={e=>upd(r.id,'qty',parseInt(e.target.value)||1)} min={1} style={{...inp,textAlign:'center'}}/></td>
+                        <td style={td}><input type="number" value={r.qty} onChange={e=>upd(r.id,'qty',e.target.value as any)} onBlur={e=>upd(r.id,'qty',(parseInt(e.target.value)||1) as any)} style={{...inp,textAlign:'center'}}/></td>
                         <td style={td}><div style={cv}>{sq>0?sq.toFixed(2):'—'}</div></td>
                         {colVisible('remark') && <td style={{...td,background:'rgba(39,174,96,.03)'}}>{txt_('remark',r.remark,true)}</td>}
                         <td style={td}><div style={{...cv,fontWeight:500}}>{bq>0?fmt(bq):'—'}</div></td>
                         <td style={td}><div style={{...cv,fontWeight:500}}>{mq>0?fmt(mq):'—'}</div></td>
                         <td style={td}><div style={{...cv,color:'#8B6914',fontWeight:700}}>{lt>0?fmt(lt):'—'}</div></td>
-                        <td style={{...td,textAlign:'center',borderRight:'none'}}>
-                          <button onClick={ev=>{ev.stopPropagation(); delRowById(r.id)}} title="Delete this row"
-                            style={{background:'none',border:'none',color:'#9AA5B4',cursor:'pointer',fontSize:13,padding:'4px 6px',borderRadius:4}}
+                        <td style={{...td,textAlign:'center',borderRight:'none',whiteSpace:'nowrap'}}>
+                          <button tabIndex={-1} onClick={ev=>{ev.stopPropagation(); delRowById(r.id)}} title="Delete this row"
+                            style={{background:'none',border:'none',color:'#9AA5B4',cursor:'pointer',fontSize:13,padding:'4px 4px',borderRadius:4}}
                             onMouseEnter={ev=>{(ev.target as HTMLElement).style.background='#FEE2E2';(ev.target as HTMLElement).style.color='#E53E3E'}}
                             onMouseLeave={ev=>{(ev.target as HTMLElement).style.background='none';(ev.target as HTMLElement).style.color='#9AA5B4'}}>✕</button>
                         </td>
@@ -903,7 +1001,9 @@ export default function AdminProjectPage() {
                 <tfoot>
                   <tr style={{borderTop:'2px solid #C9A84C',background:'#EDEBE6'}}>
                     <td style={{padding:'6px',fontWeight:700,fontSize:11,textAlign:'center'}}>Σ</td>
-                    <td colSpan={12-hiddenCols.size} style={{padding:'6px 10px',fontWeight:700,fontSize:11,color:'#4A5568'}}>TOTALS</td>
+                    <td colSpan={10-(['fabric','valance','bottom_rail','mount'].filter(k=>hiddenCols.has(k)).length)} style={{padding:'6px 10px',fontWeight:700,fontSize:11,color:'#4A5568'}}>TOTALS</td>
+                    <td style={{padding:'6px',fontWeight:700,color:'#8B6914',fontSize:13}} title="Sum of each row's Sq.M × Qty">{totSqm.toFixed(2)}</td>
+                    {colVisible('remark') && <td></td>}
                     <td style={{padding:'6px',fontWeight:700,color:'#8B6914',fontSize:13}}>{fmt(totB*(1-config.discount_pct/100))}</td>
                     <td style={{padding:'6px',fontWeight:700,color:'#8B6914',fontSize:13}}>{fmt(totM*(1-config.discount_pct/100))}</td>
                     <td style={{padding:'6px',fontWeight:700,color:'#8B6914',fontSize:13}}>{fmt(sub)}</td>
@@ -1217,9 +1317,8 @@ export default function AdminProjectPage() {
                   </div>
                 </div>
 
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+                <div style={{marginBottom:12}}>
                   <button onClick={()=>{setShowAddInvoice(v=>!v); setNewInvPct(Math.min(30,remainingPct))}} style={{background:'#8B6914',color:'#fff',border:'none',padding:'9px 16px',borderRadius:7,fontSize:12,fontWeight:700,cursor:'pointer'}}>＋ Add Invoice</button>
-                  <div style={{fontSize:12,color:'#4A5568'}}>Remaining to invoice: <strong style={{color:'#8B6914'}}>{remainingPct}%</strong> ({fmt(Number(project.grand_total||0)*(remainingPct/100))})</div>
                 </div>
 
                 {showAddInvoice && (

@@ -14,6 +14,10 @@ export default function LoginPage() {
     e.preventDefault(); setLoading(true); setError('')
     const { error } = await createClient().auth.signInWithPassword({ email, password })
     if (error) { setError(error.message); setLoading(false); return }
+    // Fallback link-check: covers accounts whose signup happened while email
+    // confirmation was still pending, so the signup-time link never ran. No-op
+    // if already linked or if this is an admin account.
+    try { await fetch('/api/auth/link-customer', { method: 'POST' }) } catch {}
     router.push('/'); router.refresh()
   }
 
@@ -26,7 +30,7 @@ export default function LoginPage() {
         <img src="/ceb-logo.jpg" alt="CEB" style={{width:160,height:160,borderRadius:'50%',objectFit:'cover',border:'3px solid rgba(201,168,76,.5)',boxShadow:'0 0 60px rgba(201,168,76,.15)',marginBottom:28,position:'relative'}}/>
         <h1 style={{fontFamily:'Playfair Display,serif',fontSize:28,color:'#fff',textAlign:'center',margin:'0 0 8px',position:'relative'}}>Custom Elegant Blinds</h1>
         <p style={{fontSize:12,color:'rgba(255,255,255,.4)',textAlign:'center',letterSpacing:'1.5px',textTransform:'uppercase',position:'relative'}}>Interior Design · Design & Build · Procurement</p>
-        <div style={{position:'relative',marginTop:40,fontSize:11,color:'rgba(255,255,255,.2)',letterSpacing:'1px'}}>ceblinds.click · Edmonds, WA</div>
+        <div style={{position:'relative',marginTop:40,fontSize:11,color:'rgba(255,255,255,.2)',letterSpacing:'1px'}}>ceblinds.click · Monroe, WA</div>
       </div>
 
       {/* Right — login form */}
