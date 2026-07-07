@@ -7,3 +7,5 @@ node_modules/
 ceb-app/
 *.sh
 *.zip
+.vercel
+.env*

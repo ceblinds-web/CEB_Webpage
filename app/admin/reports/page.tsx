@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import AdminNavLinks from '@/components/AdminNavLinks'
 
 export default function ReportsPage() {
   const router = useRouter()
@@ -71,10 +72,7 @@ export default function ReportsPage() {
           <a href="/admin" title="Home"><img src="/ceb-logo.jpg" alt="CEB" style={{width:32,height:32,objectFit:'contain',cursor:'pointer'}}/></a>
           <span style={{fontFamily:'Playfair Display,serif',fontSize:16,color:'#fff'}}>📈 Reports</span>
         </div>
-        <div style={{display:'flex',gap:10}}>
-          <a href="/gallery" style={{fontSize:12,color:'#C9A84C',textDecoration:'none',padding:'5px 12px',border:'1px solid rgba(201,168,76,.3)',borderRadius:6,background:'rgba(201,168,76,.08)'}}>🖼 Gallery</a>
-          <button onClick={()=>router.push('/admin/home')} style={{fontSize:12,color:'rgba(255,255,255,.5)',background:'none',border:'1px solid rgba(255,255,255,.15)',padding:'5px 12px',borderRadius:6,cursor:'pointer'}}>← Project Home</button>
-        </div>
+        <AdminNavLinks active="reports"/>
       </header>
 
       <main style={{maxWidth:1100,margin:'0 auto',padding:'24px 20px'}}>

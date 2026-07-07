@@ -1,5 +1,5 @@
 'use client'
-import { useRouter } from 'next/navigation'
+import AdminNavLinks from '@/components/AdminNavLinks'
 
 const PRODUCTS = [
   { icon:'🦓', name:'Zebra Blinds', desc:'Dual-layer sheer/solid fabric bands for adjustable light control.' },
@@ -12,15 +12,14 @@ const PRODUCTS = [
 ]
 
 export default function GalleryPage() {
-  const router = useRouter()
   return (
     <div style={{minHeight:'100vh',background:'#1C1C1E',fontFamily:'Inter,sans-serif'}}>
       <header style={{padding:'18px 24px',display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,background:'#1C1C1E',borderBottom:'1px solid rgba(255,255,255,.08)',zIndex:5}}>
         <div style={{display:'flex',alignItems:'center',gap:12}}>
-          <a href="/admin" title="Home"><img src="/ceb-logo.jpg" alt="CEB" style={{width:40,height:40,objectFit:'contain',cursor:'pointer'}}/></a>
-          <span style={{fontFamily:'Playfair Display,serif',fontSize:19,color:'#fff'}}>Custom Elegant Blinds — Product Gallery</span>
+          <a href="/admin" title="Home"><img src="/ceb-logo.jpg" alt="CEB" style={{width:32,height:32,objectFit:'contain',cursor:'pointer'}}/></a>
+          <span style={{fontFamily:'Playfair Display,serif',fontSize:16,color:'#fff'}}>Custom Elegant Blinds — Product Gallery</span>
         </div>
-        <button onClick={()=>router.push('/admin')} style={{background:'rgba(255,255,255,.1)',border:'1px solid rgba(255,255,255,.15)',color:'#fff',padding:'6px 14px',borderRadius:6,fontSize:12,cursor:'pointer'}}>← Back</button>
+        <AdminNavLinks active="gallery"/>
       </header>
       <div style={{padding:'28px 24px',maxWidth:1100,margin:'0 auto'}}>
         <p style={{color:'rgba(255,255,255,.55)',fontSize:13,marginBottom:20}}>Zebra Blinds · Honey Comb · Dream Curtain — browse our product lines.</p>

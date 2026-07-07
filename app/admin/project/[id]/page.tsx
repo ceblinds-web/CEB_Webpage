@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import AdminNavLinks from '@/components/AdminNavLinks'
 
 const CONV = 0.00064516
 const MOUNTS = ['Inside','Outside']
@@ -728,11 +729,10 @@ export default function AdminProjectPage() {
     <div style={{display:'flex',flexDirection:'column',height:'100vh',fontFamily:'Inter,sans-serif',background:'#F7F4EF',color:'#1C1C1E'}}>
       {/* HEADER */}
       <header style={{height:56,background:'#1C1C1E',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 18px',flexShrink:0}}>
-        <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>
           <a href="/admin" title="Home"><img src="/ceb-logo.jpg" alt="CEB" style={{width:36,height:36,objectFit:'contain',flexShrink:0,cursor:'pointer'}}/></a>
-          <button style={{border:'none',padding:'5px 12px',borderRadius:6,fontSize:12,fontFamily:'Inter,sans-serif',fontWeight:600,cursor:'pointer',background:'rgba(255,255,255,.1)',color:'#fff'}} onClick={()=>router.push('/admin/home')}>← Project Home</button>
-          <span style={{color:'#fff',fontFamily:'Playfair Display,serif',fontSize:15}}>{project.name}</span>
-          <span style={{color:'#9AA5B4',fontSize:11}}>{project.customers?.name} · {project.address||project.email}</span>
+          <span style={{color:'#fff',fontFamily:'Playfair Display,serif',fontSize:15,whiteSpace:'nowrap'}}>{project.name}</span>
+          <span style={{color:'#9AA5B4',fontSize:11,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{project.customers?.name} · {project.address||project.email}</span>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           {project.confirmed_at ? (
@@ -749,6 +749,7 @@ export default function AdminProjectPage() {
           }} style={{fontSize:12,padding:'4px 8px',borderRadius:6,border:'1px solid #555',background:'#333',color:'#fff',cursor:'pointer'}}>
             {['draft','sent','viewed','confirmed','invoiced','completed','cancelled'].map(s=><option key={s} value={s}>{s}</option>)}
           </select>
+          <AdminNavLinks active="project"/>
         </div>
       </header>
 

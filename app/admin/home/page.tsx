@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import AdminNavLinks from '@/components/AdminNavLinks'
 
 export default function ProjectHome() {
   const router = useRouter()
@@ -96,18 +97,18 @@ export default function ProjectHome() {
   const allProjects = customers.flatMap(c=>(c.projects||[]).map((p:any)=>({...p,customerName:c.name})))
 
   return (
-    <div style={{display:'flex',height:'100vh',fontFamily:'Inter,sans-serif',background:'#F7F4EF'}}>
+    <div style={{display:'flex',flexDirection:'column',height:'100vh',fontFamily:'Inter,sans-serif',background:'#F7F4EF'}}>
+      <header style={{height:56,background:'#1C1C1E',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 20px',flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <a href="/admin"><img src="/ceb-logo.jpg" alt="CEB" style={{width:32,height:32,objectFit:'contain',cursor:'pointer'}}/></a>
+          <span style={{fontFamily:'Playfair Display,serif',fontSize:15,color:'#fff'}}>Project Home</span>
+        </div>
+        <AdminNavLinks active="home"/>
+      </header>
+      <div style={{display:'flex',flex:1,overflow:'hidden'}}>
       <aside style={{width:272,background:'#1C1C1E',display:'flex',flexDirection:'column',flexShrink:0,overflowY:'auto'}}>
         <div style={{padding:'14px 14px 10px',borderBottom:'1px solid rgba(255,255,255,.08)'}}>
-          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
-            <a href="/admin"><img src="/ceb-logo.jpg" alt="CEB" style={{width:32,height:32,objectFit:'contain',cursor:'pointer'}}/></a>
-            <span style={{fontFamily:'Playfair Display,serif',fontSize:14,color:'#fff'}}>Project Home</span>
-          </div>
-          <div style={{display:'flex',gap:8}}>
-            <a href="/admin" style={{fontSize:10,color:'#9AA5B4',textDecoration:'none'}}>← Home</a>
-            <span style={{color:'rgba(255,255,255,.1)'}}>·</span>
-            <a href="/admin/reports" style={{fontSize:10,color:'#C084FC',textDecoration:'none'}}>📈 Reports</a>
-          </div>
+          <div style={{fontFamily:'Playfair Display,serif',fontSize:11,color:'#9AA5B4',letterSpacing:'1px',textTransform:'uppercase'}}>Customers &amp; Projects</div>
         </div>
 
         <div style={{padding:'10px 12px 0',flex:1}}>
@@ -244,6 +245,7 @@ export default function ProjectHome() {
             )}
           </div>
         </div>
+      </div>
       </div>
 
       {showNewCustomer && (
