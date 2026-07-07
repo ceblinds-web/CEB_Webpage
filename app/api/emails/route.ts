@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 import { requireAdmin } from '@/lib/require-admin'
+import { sendEmail } from '@/lib/resend'
 
 export async function GET(req: Request) {
   const auth = await requireAdmin()
@@ -32,12 +33,17 @@ export async function POST(req: Request) {
   }).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Actual delivery via Resend isn't wired up yet — this only logs the send.
-  // Once Resend is connected, call it here before/after this insert.
+  // Actually attempt delivery via Resend. A failed send does NOT roll back the
+  // log entry above — the record that you tried to send this is kept either
+  // way — but the response tells the caller whether it actually went out.
+  const sendResult = await sendEmail({ to: toEmail, subject, text: body || '' })
 
   await supabase.from('activity_log').insert({
-    project_id: projectId, actor: auth.actor, action: `Emailed "${subject}" to ${toEmail}`,
+    project_id: projectId, actor: auth.actor,
+    action: sendResult.ok
+      ? `Emailed "${subject}" to ${toEmail}`
+      : `Attempted to email "${subject}" to ${toEmail} — delivery failed: ${sendResult.error}`,
   })
 
-  return NextResponse.json(data)
+  return NextResponse.json({ ...data, delivered: sendResult.ok, deliveryError: sendResult.ok ? null : sendResult.error })
 }

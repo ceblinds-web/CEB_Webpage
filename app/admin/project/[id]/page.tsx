@@ -476,7 +476,8 @@ export default function AdminProjectPage() {
       try { data = text ? JSON.parse(text) : {} } catch { showToast('Server returned an unexpected response (not JSON). Status '+res.status,'err'); return }
       if (!res.ok) { showToast(data.error||'Could not send email','err'); return }
       setEmails(prev=>[data, ...prev])
-      showToast('Invoice emailed to customer','ok')
+      if (data.delivered) showToast('Invoice emailed to customer','ok')
+      else showToast('Logged, but not actually delivered: '+(data.deliveryError||'unknown error'),'err')
     } catch (err:any) {
       showToast('Network/JS error emailing invoice: '+err.message,'err')
     } finally { setInvBusy(false) }
@@ -632,6 +633,8 @@ export default function AdminProjectPage() {
       if (!res.ok) { showToast(data.error||'Could not send','err'); return }
       setEmails(prev=>[data, ...prev])
       setShowSendEmail(false)
+      if (data.delivered) showToast('Email sent','ok')
+      else showToast('Logged, but not actually delivered: '+(data.deliveryError||'unknown error'),'err')
     } catch (err:any) {
       showToast('Network/JS error sending email: '+err.message,'err')
     } finally { setEmailBusy(false) }
@@ -1582,7 +1585,7 @@ export default function AdminProjectPage() {
                     <input value={emailSubject} onChange={e=>setEmailSubject(e.target.value)} style={{width:'100%',padding:'7px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12,marginBottom:10}}/>
                     <label style={{display:'block',fontSize:10,fontWeight:700,color:'#4A5568',marginBottom:3}}>Body</label>
                     <textarea value={emailBody} onChange={e=>setEmailBody(e.target.value)} rows={6} style={{width:'100%',padding:'7px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12,marginBottom:10,fontFamily:'Inter,sans-serif'}}/>
-                    <div style={{fontSize:10,color:'#9AA5B4',marginBottom:10}}>Actual delivery via Resend isn't wired up yet — this logs the send for now.</div>
+                    <div style={{fontSize:10,color:'#9AA5B4',marginBottom:10}}>Sent via Resend. Until a sending domain is verified, delivery is limited to the email your Resend account is registered with.</div>
                     <div style={{display:'flex',gap:8}}>
                       <button disabled={emailBusy} onClick={sendCustomEmail} style={{background:'#0D9488',color:'#fff',border:'none',padding:'8px 16px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer'}}>{emailBusy?'Sending…':'Send'}</button>
                       <button onClick={()=>setShowSendEmail(false)} style={{background:'#fff',border:'1px solid #E2DDD6',padding:'8px 16px',borderRadius:6,fontSize:12,cursor:'pointer'}}>Cancel</button>
