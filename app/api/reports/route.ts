@@ -120,7 +120,7 @@ export async function GET(req: Request) {
   }
 
   const breakdownByProject = new Map<string, ReturnType<typeof computeProjectBreakdown>>()
-  for (const projectId of projectIdsWithPayments) {
+  for (const projectId of Array.from(projectIdsWithPayments)) {
     const breakdown = computeProjectBreakdown(
       rowsByProject[projectId] || [],
       configByProject.get(projectId),
