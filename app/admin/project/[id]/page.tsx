@@ -24,6 +24,7 @@ type Row = { id:string; is_section:boolean; section_name?:string; blind_type:str
 type Config = { tax_pct:number; shipping_pct:number; discount_pct:number; discount_reason:string; installation:number }
 type Product = { id:string; name:string; my_cost_per_sqm:number; factor:number }
 type Motor = { id:string; name:string; my_cost_per_unit:number; factor:number }
+type Fabric = { id:string; code:string; series:string; vendor:string|null; category:string; cost_cordless:number; cost_beadchain:number; is_active:boolean }
 type Fee = { id?:string; label:string; fee_type:'flat'|'pct'; value:number }
 type Invoice = { id:string; invoice_number:string; status:string; total_amount:number|null; sequence_num:number|null; invoice_type:string|null; pct_of_total:number|null; payment_method:string|null; square_surcharge:number|null; fully_paid_at:string|null; created_at:string }
 type GrievancePhoto = { id:string; photo_url:string; caption:string|null }
@@ -42,6 +43,8 @@ export default function AdminProjectPage() {
   const [config, setConfig] = useState<Config>({ tax_pct:10, shipping_pct:18, discount_pct:0, discount_reason:'', installation:500 })
   const [products, setProducts] = useState<Product[]>([])
   const [motors, setMotors] = useState<Motor[]>([])
+  const [fabrics, setFabrics] = useState<Fabric[]>([])
+  const fabricOptions = Array.from(new Set([...fabrics.map(f=>f.code), ...FABRICS_DEFAULT]))
   const [selId, setSelId] = useState<string|null>(null)
   const [tab, setTab] = useState<'sheet'|'purchase'|'summary'|'invoices'|'grievances'|'email'>('sheet')
   const [pushing, setPushing] = useState(false)
@@ -54,6 +57,12 @@ export default function AdminProjectPage() {
   const [importStatus, setImportStatus] = useState<{msg:string; type:'ok'|'error'|'info'}|null>(null)
   const [newProdName, setNewProdName] = useState(''); const [newProdCost, setNewProdCost] = useState(15); const [newProdFactor, setNewProdFactor] = useState(5)
   const [newMotorName, setNewMotorName] = useState(''); const [newMotorCost, setNewMotorCost] = useState(30); const [newMotorFactor, setNewMotorFactor] = useState(3)
+  const [selectedFabricId, setSelectedFabricId] = useState('')
+  const [fabricEditForm, setFabricEditForm] = useState<{code:string,series:string,vendor:string,category:string,cost_cordless:number,cost_beadchain:number}|null>(null)
+  const [fabricSearch, setFabricSearch] = useState('')
+  const [showAddFabric, setShowAddFabric] = useState(false)
+  const [newFabricForm, setNewFabricForm] = useState({code:'',series:'',vendor:'',category:'zebra',cost_cordless:0,cost_beadchain:0})
+  const [fabricBusy, setFabricBusy] = useState(false)
 
   // ── NEW: Invoices / Grievances / Email state ──
   const [invoices, setInvoices] = useState<Invoice[]>([])
@@ -115,6 +124,7 @@ export default function AdminProjectPage() {
     }).catch(()=>setLoadError(true))
     fetch('/api/products', { cache:'no-store' }).then(r=>r.json()).then(setProducts).catch(()=>setProducts([]))
     fetch('/api/motors', { cache:'no-store' }).then(r=>r.json()).then(setMotors).catch(()=>setMotors([]))
+    fetch('/api/fabrics', { cache:'no-store' }).then(r=>r.json()).then(setFabrics).catch(()=>setFabrics([]))
     fetch('/api/customers', { cache:'no-store' }).then(r=>r.json()).then(setCustomers).catch(()=>setCustomers([]))
     // Invoices/grievances/emails load in parallel but don't gate the initial render —
     // the Sheet tab (the default) doesn't need any of them.
@@ -134,10 +144,23 @@ export default function AdminProjectPage() {
   const sqm = (w:any,h:any) => { const s = rawSqm(w,h); return s>0 ? Math.max(1,s) : 0 }
   const getProd = (type:string) => products.find(p=>p.name===type)||{my_cost_per_sqm:16, factor:5}
   const getMtr = (ctrl:string) => motors.find(m=>m.name===ctrl)||{my_cost_per_unit:0, factor:1}
-  const blindsQ = (r:Row) => { const p=getProd(r.blind_type); return Math.round(sqm(r.width_in,r.height_in)*p.my_cost_per_sqm*p.factor*100)/100*(r.qty||1) }
+  // Fabric selection drives the COST; blind type still drives the FACTOR.
+  // The pricing sheet has two cost columns (cordless mechanism vs bead
+  // chain) — motorized controls use the cordless base cost, since the
+  // motor's own additional cost is already layered on separately via
+  // motorQ(). Returns null (falls back to the product's own cost) for any
+  // fabric value that isn't a recognized catalog code — keeps existing
+  // projects using old-style fabric names (YX2501, Standard, etc.) working
+  // exactly as before.
+  const getFabricCost = (r:Row): number|null => {
+    const fab = fabrics.find(f=>f.code===r.fabric)
+    if (!fab) return null
+    return /chain/i.test(r.control||'') ? fab.cost_beadchain : fab.cost_cordless
+  }
+  const blindsQ = (r:Row) => { const p=getProd(r.blind_type); const cost=getFabricCost(r)??p.my_cost_per_sqm; return Math.round(sqm(r.width_in,r.height_in)*cost*p.factor*100)/100*(r.qty||1) }
   const motorQ = (r:Row) => { const m=getMtr(r.control); return m.my_cost_per_unit*m.factor*(r.qty||1) }
   // raw purchase cost (no factor) — what CEB actually pays, used for In-Pocket
-  const blindsCost = (r:Row) => { const p=getProd(r.blind_type); return Math.round(sqm(r.width_in,r.height_in)*p.my_cost_per_sqm*100)/100*(r.qty||1) }
+  const blindsCost = (r:Row) => { const p=getProd(r.blind_type); const cost=getFabricCost(r)??p.my_cost_per_sqm; return Math.round(sqm(r.width_in,r.height_in)*cost*100)/100*(r.qty||1) }
   const motorCost = (r:Row) => { const m=getMtr(r.control); return m.my_cost_per_unit*(r.qty||1) }
   const lineTotal = (r:Row) => (blindsQ(r)+motorQ(r))*(1-config.discount_pct/100)
   const fmt = (n:number) => (n<0?'-':'')+'$'+Math.abs(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',')
@@ -295,6 +318,48 @@ export default function AdminProjectPage() {
     markDirty()
     showToast('Motor/control removed','ok')
   }
+
+  const selectFabricToEdit = (id:string) => {
+    setSelectedFabricId(id)
+    const f = fabrics.find(x=>x.id===id)
+    if (f) setFabricEditForm({ code:f.code, series:f.series, vendor:f.vendor||'', category:f.category, cost_cordless:f.cost_cordless, cost_beadchain:f.cost_beadchain })
+  }
+  const saveFabricEdit = async () => {
+    if (!selectedFabricId || !fabricEditForm) return
+    setFabricBusy(true)
+    try {
+      const res = await fetch(`/api/fabrics/${selectedFabricId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(fabricEditForm) })
+      const data = await res.json()
+      if (!res.ok) { showToast(data.error||'Could not save fabric','err'); return }
+      setFabrics(prev=>prev.map(f=>f.id===selectedFabricId?data:f))
+      showToast('Fabric updated — new rows using it will use this cost','ok')
+    } catch (err:any) { showToast('Network error: '+err.message,'err') } finally { setFabricBusy(false) }
+  }
+  const deactivateFabric = async () => {
+    if (!selectedFabricId) return
+    setFabricBusy(true)
+    try {
+      const res = await fetch(`/api/fabrics/${selectedFabricId}`, { method:'DELETE' })
+      if (!res.ok) { showToast('Could not remove fabric','err'); return }
+      setFabrics(prev=>prev.filter(f=>f.id!==selectedFabricId))
+      setSelectedFabricId(''); setFabricEditForm(null)
+      showToast('Fabric marked unavailable (existing rows using it are unaffected)','ok')
+    } catch (err:any) { showToast('Network error: '+err.message,'err') } finally { setFabricBusy(false) }
+  }
+  const addFabric = async () => {
+    if (!newFabricForm.code.trim() || !newFabricForm.series.trim()) return showToast('Code and series are required','err')
+    setFabricBusy(true)
+    try {
+      const res = await fetch('/api/fabrics', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(newFabricForm) })
+      const data = await res.json()
+      if (!res.ok) { showToast(data.error||'Could not add fabric','err'); return }
+      setFabrics(prev=>[...prev, data].sort((a,b)=>a.series.localeCompare(b.series)||a.code.localeCompare(b.code)))
+      setNewFabricForm({code:'',series:'',vendor:newFabricForm.vendor,category:newFabricForm.category,cost_cordless:0,cost_beadchain:0})
+      setShowAddFabric(false)
+      showToast('Fabric added','ok')
+    } catch (err:any) { showToast('Network error: '+err.message,'err') } finally { setFabricBusy(false) }
+  }
+  const filteredFabrics = fabrics.filter(f => !fabricSearch.trim() || f.code.toLowerCase().includes(fabricSearch.toLowerCase()) || f.series.includes(fabricSearch) || (f.vendor||'').toLowerCase().includes(fabricSearch.toLowerCase()))
 
   // ── NEW: SIDEBAR CUSTOMER/PROJECT MANAGEMENT (inline forms, no native dialogs) ──
   const openAddProjectForm = (customerId:string) => {
@@ -1009,7 +1074,7 @@ export default function AdminProjectPage() {
                         <td style={{...td,background:'rgba(39,174,96,.03)'}}>{sel_('blind_type',r.blind_type,products.map(p=>p.name))}</td>
                         <td style={{...td,background:'rgba(39,174,96,.03)'}}>{sel_('control',r.control,motors.map(m=>m.name))}</td>
                         <td style={td}>{txt_('location',r.location)}</td>
-                        {colVisible('fabric') && <td style={{...td,background:'rgba(39,174,96,.03)'}}>{sel_('fabric',r.fabric,FABRICS_DEFAULT)}</td>}
+                        {colVisible('fabric') && <td style={{...td,background:'rgba(39,174,96,.03)'}}>{sel_('fabric',r.fabric,fabricOptions)}</td>}
                         {colVisible('valance') && <td style={{...td,background:'rgba(39,174,96,.03)'}}>{sel_('valance',r.valance,VALANCES)}</td>}
                         {colVisible('bottom_rail') && <td style={{...td,background:'rgba(39,174,96,.03)'}}>{sel_('bottom_rail',r.bottom_rail,BRAILS)}</td>}
                         {colVisible('mount') && <td style={{...td,background:'rgba(39,174,96,.03)'}}>{sel_('mount',r.mount,MOUNTS)}</td>}
@@ -1150,6 +1215,65 @@ export default function AdminProjectPage() {
                       <input type="number" placeholder="Factor" value={newMotorFactor} onChange={e=>setNewMotorFactor(parseFloat(e.target.value)||0)} style={{width:80,padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/>
                       <button onClick={addMotor} style={{background:'#7C3AED',color:'#fff',border:'none',padding:'7px 14px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer'}}>＋ Add</button>
                     </div>
+                  </div>
+                </div>
+
+                {/* FABRICS */}
+                <div style={{background:'#fff',borderRadius:10,border:'1px solid #E2DDD6',marginBottom:16,overflow:'hidden'}}>
+                  <div style={{padding:'12px 16px',borderBottom:'1px solid #E2DDD6',fontWeight:700,fontSize:13}}>Fabrics <span style={{background:'#FEF3C7',color:'#92400E',fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:700,marginLeft:6}}>Linked to "Fabric" column — drives cost, blind type still sets the factor</span></div>
+                  <div style={{padding:'14px 16px'}}>
+                    <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+                      <input placeholder="🔍 Search by code, series, or vendor..." value={fabricSearch} onChange={e=>setFabricSearch(e.target.value)} style={{flex:1,minWidth:200,padding:'7px 10px',border:'1px solid #E2DDD6',borderRadius:6,fontSize:12}}/>
+                      <select value={selectedFabricId} onChange={e=>selectFabricToEdit(e.target.value)} style={{minWidth:200,padding:'7px 10px',border:'1px solid #E2DDD6',borderRadius:6,fontSize:12}}>
+                        <option value="">— Select a fabric to view/edit —</option>
+                        {filteredFabrics.map(f=>(
+                          <option key={f.id} value={f.id}>{f.code} (series {f.series}) — ${f.cost_cordless}/${f.cost_beadchain}</option>
+                        ))}
+                      </select>
+                      <button onClick={()=>setShowAddFabric(v=>!v)} style={{background:'#F59E0B',color:'#fff',border:'none',padding:'7px 14px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer'}}>＋ Add Fabric</button>
+                    </div>
+                    <div style={{fontSize:11,color:'#9AA5B4',marginBottom:showAddFabric||fabricEditForm?12:0}}>{filteredFabrics.length} of {fabrics.length} fabrics{fabricSearch?' matching "'+fabricSearch+'"':''}</div>
+
+                    {showAddFabric && (
+                      <div style={{border:'1px dashed #F59E0B',borderRadius:8,padding:12,marginBottom:12,background:'#FFFBEB'}}>
+                        <div style={{fontSize:11,fontWeight:700,color:'#92400E',marginBottom:8}}>New Fabric</div>
+                        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))',gap:8,marginBottom:8}}>
+                          <input placeholder="Code (e.g. 83046A)" value={newFabricForm.code} onChange={e=>setNewFabricForm(p=>({...p,code:e.target.value}))} style={{padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/>
+                          <input placeholder="Series (e.g. 83046)" value={newFabricForm.series} onChange={e=>setNewFabricForm(p=>({...p,series:e.target.value}))} style={{padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/>
+                          <input placeholder="Vendor" value={newFabricForm.vendor} onChange={e=>setNewFabricForm(p=>({...p,vendor:e.target.value}))} style={{padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/>
+                          <select value={newFabricForm.category} onChange={e=>setNewFabricForm(p=>({...p,category:e.target.value}))} style={{padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}>
+                            <option value="zebra">Zebra</option>
+                            <option value="dream_curtain">Dream Curtain</option>
+                            <option value="other">Other</option>
+                          </select>
+                          <input type="number" placeholder="Cordless cost" value={newFabricForm.cost_cordless||''} onChange={e=>setNewFabricForm(p=>({...p,cost_cordless:parseFloat(e.target.value)||0}))} style={{padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/>
+                          <input type="number" placeholder="Bead chain cost" value={newFabricForm.cost_beadchain||''} onChange={e=>setNewFabricForm(p=>({...p,cost_beadchain:parseFloat(e.target.value)||0}))} style={{padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/>
+                        </div>
+                        <button disabled={fabricBusy} onClick={addFabric} style={{background:'#F59E0B',color:'#fff',border:'none',padding:'7px 16px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer'}}>{fabricBusy?'Adding…':'Add Fabric'}</button>
+                      </div>
+                    )}
+
+                    {fabricEditForm && (
+                      <div style={{border:'1px solid #E2DDD6',borderRadius:8,padding:12,background:'#FAFAFA'}}>
+                        <div style={{fontSize:11,fontWeight:700,color:'#4A5568',marginBottom:8}}>Editing {fabricEditForm.code}</div>
+                        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))',gap:8,marginBottom:10}}>
+                          <div><label style={{fontSize:9,color:'#9AA5B4',display:'block'}}>Code</label><input value={fabricEditForm.code} onChange={e=>setFabricEditForm(p=>p?{...p,code:e.target.value}:p)} style={{width:'100%',padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/></div>
+                          <div><label style={{fontSize:9,color:'#9AA5B4',display:'block'}}>Series</label><input value={fabricEditForm.series} onChange={e=>setFabricEditForm(p=>p?{...p,series:e.target.value}:p)} style={{width:'100%',padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/></div>
+                          <div><label style={{fontSize:9,color:'#9AA5B4',display:'block'}}>Vendor</label><input value={fabricEditForm.vendor} onChange={e=>setFabricEditForm(p=>p?{...p,vendor:e.target.value}:p)} style={{width:'100%',padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/></div>
+                          <div><label style={{fontSize:9,color:'#9AA5B4',display:'block'}}>Category</label>
+                            <select value={fabricEditForm.category} onChange={e=>setFabricEditForm(p=>p?{...p,category:e.target.value}:p)} style={{width:'100%',padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}>
+                              <option value="zebra">Zebra</option><option value="dream_curtain">Dream Curtain</option><option value="other">Other</option>
+                            </select>
+                          </div>
+                          <div><label style={{fontSize:9,color:'#9AA5B4',display:'block'}}>Cordless cost/m²</label><input type="number" value={fabricEditForm.cost_cordless} onChange={e=>setFabricEditForm(p=>p?{...p,cost_cordless:parseFloat(e.target.value)||0}:p)} style={{width:'100%',padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/></div>
+                          <div><label style={{fontSize:9,color:'#9AA5B4',display:'block'}}>Bead chain cost/m²</label><input type="number" value={fabricEditForm.cost_beadchain} onChange={e=>setFabricEditForm(p=>p?{...p,cost_beadchain:parseFloat(e.target.value)||0}:p)} style={{width:'100%',padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/></div>
+                        </div>
+                        <div style={{display:'flex',gap:8}}>
+                          <button disabled={fabricBusy} onClick={saveFabricEdit} style={{background:'#27AE60',color:'#fff',border:'none',padding:'7px 16px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer'}}>{fabricBusy?'Saving…':'Save Changes'}</button>
+                          <button disabled={fabricBusy} onClick={deactivateFabric} style={{background:'#fff',color:'#E53E3E',border:'1px solid #FECACA',padding:'7px 16px',borderRadius:6,fontSize:12,cursor:'pointer'}}>Mark Unavailable</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 

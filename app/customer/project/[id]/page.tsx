@@ -19,7 +19,7 @@ export default function CustomerProjectPage() {
   const [project, setProject] = useState<any>(null)
   const [rows, setRows] = useState<Row[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
-  const [pricing, setPricing] = useState<{priceLookup:{name:string,quotePerSqm:number}[], motorLookup:{name:string,quotePerUnit:number}[]}>({priceLookup:[],motorLookup:[]})
+  const [pricing, setPricing] = useState<{priceLookup:{name:string,quotePerSqm:number}[], motorLookup:{name:string,quotePerUnit:number}[], fabricQuoteLookup:{fabricCode:string,blindType:string,quotePerSqmCordless:number,quotePerSqmBeadchain:number}[]}>({priceLookup:[],motorLookup:[],fabricQuoteLookup:[]})
   const [products, setProducts] = useState<string[]>([])
   const [motors, setMotors] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
@@ -41,7 +41,7 @@ export default function CustomerProjectPage() {
         const rawRows = (d.project_rows||[]).sort((a:any,b:any)=>a.sort_order-b.sort_order)
         setRows(rawRows)
         setInvoices(d.invoices||[])
-        setPricing(d._pricing || {priceLookup:[],motorLookup:[]})
+        setPricing(d._pricing || {priceLookup:[],motorLookup:[],fabricQuoteLookup:[]})
         setProducts((d._pricing?.priceLookup||[]).map((p:any)=>p.name))
         setMotors((d._pricing?.motorLookup||[]).map((m:any)=>m.name))
         setLoadError(false)
@@ -69,7 +69,16 @@ export default function CustomerProjectPage() {
   }
 
   const sqm = (w:any,h:any) => parseFloat(w||0)*parseFloat(h||0)*CONV
-  const blindsPrice = (r:Row) => { const p=pricing.priceLookup.find(x=>x.name===r.blind_type); return p ? Math.round(sqm(r.width_in,r.height_in)*p.quotePerSqm*100)/100*(r.qty||1) : 0 }
+  const fabricOptions = Array.from(new Set([...pricing.fabricQuoteLookup.map(f=>f.fabricCode), ...FABRICS_DEFAULT]))
+  const blindsPrice = (r:Row) => {
+    const fabQuote = pricing.fabricQuoteLookup.find(x=>x.fabricCode===r.fabric && x.blindType===r.blind_type)
+    if (fabQuote) {
+      const perSqm = /chain/i.test(r.control||'') ? fabQuote.quotePerSqmBeadchain : fabQuote.quotePerSqmCordless
+      return Math.round(sqm(r.width_in,r.height_in)*perSqm*100)/100*(r.qty||1)
+    }
+    const p = pricing.priceLookup.find(x=>x.name===r.blind_type)
+    return p ? Math.round(sqm(r.width_in,r.height_in)*p.quotePerSqm*100)/100*(r.qty||1) : 0
+  }
   const motorPrice = (r:Row) => { const m=pricing.motorLookup.find(x=>x.name===r.control); return m ? m.quotePerUnit*(r.qty||1) : 0 }
   const fmt = (n:number) => '$'+Math.abs(n||0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',')
 
@@ -186,7 +195,7 @@ export default function CustomerProjectPage() {
                       <td style={{padding:'6px',borderRight:'1px solid #E2DDD6',background:'rgba(124,58,237,.04)'}}>{sel_(r,'blind_type',r.blind_type,products.length?products:[r.blind_type])}</td>
                       <td style={{padding:'6px',borderRight:'1px solid #E2DDD6',background:'rgba(124,58,237,.04)'}}>{sel_(r,'control',r.control,motors.length?motors:[r.control])}</td>
                       <td style={{padding:'8px 7px',borderRight:'1px solid #E2DDD6',fontSize:11}}>{r.location||'—'}</td>
-                      <td style={{padding:'6px',borderRight:'1px solid #E2DDD6',background:'rgba(124,58,237,.04)'}}>{sel_(r,'fabric',r.fabric,FABRICS_DEFAULT)}</td>
+                      <td style={{padding:'6px',borderRight:'1px solid #E2DDD6',background:'rgba(124,58,237,.04)'}}>{sel_(r,'fabric',r.fabric,fabricOptions)}</td>
                       <td style={{padding:'6px',borderRight:'1px solid #E2DDD6',background:'rgba(124,58,237,.04)'}}>{sel_(r,'valance',r.valance,VALANCES)}</td>
                       <td style={{padding:'6px',borderRight:'1px solid #E2DDD6',background:'rgba(124,58,237,.04)'}}>{sel_(r,'bottom_rail',r.bottom_rail,BRAILS)}</td>
                       <td style={{padding:'6px',borderRight:'1px solid #E2DDD6',background:'rgba(124,58,237,.04)'}}>{sel_(r,'mount',r.mount,MOUNTS)}</td>

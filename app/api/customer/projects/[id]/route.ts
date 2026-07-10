@@ -36,8 +36,21 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
 
   const CONV = 0.00064516
   const sqm = (w: any, h: any) => parseFloat(w || 0) * parseFloat(h || 0) * CONV
-  const priceLookup = (products ?? []).map((p: any) => ({ name: p.name, quotePerSqm: p.my_cost_per_sqm * p.factor }))
-  const motorLookup = (motors ?? []).map((m: any) => ({ name: m.name, quotePerUnit: m.my_cost_per_unit * m.factor }))
+  const { data: fabrics } = await admin.from('fabrics').select('code, cost_cordless, cost_beadchain').eq('is_active', true)
 
-  return NextResponse.json({ ...project, invoices: invoices ?? [], _pricing: { priceLookup, motorLookup, CONV } })
+  const priceLookup = (products ?? []).map((p: any) => ({ name: p.name, quotePerSqm: p.my_cost_per_sqm * p.factor, factor: p.factor }))
+  const motorLookup = (motors ?? []).map((m: any) => ({ name: m.name, quotePerUnit: m.my_cost_per_unit * m.factor }))
+  // Fabric-aware quotes: cost (fabric) x factor (blind type), pre-multiplied
+  // server-side for every combination — same security posture as the
+  // blind-type-only lookup above, the customer only ever sees a final quote
+  // number, never the fabric's raw wholesale cost.
+  const fabricQuoteLookup = (fabrics ?? []).flatMap((f: any) =>
+    (products ?? []).map((p: any) => ({
+      fabricCode: f.code, blindType: p.name,
+      quotePerSqmCordless: f.cost_cordless * p.factor,
+      quotePerSqmBeadchain: f.cost_beadchain * p.factor,
+    }))
+  )
+
+  return NextResponse.json({ ...project, invoices: invoices ?? [], _pricing: { priceLookup, motorLookup, fabricQuoteLookup, CONV } })
 }
