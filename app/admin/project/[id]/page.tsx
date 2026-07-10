@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import AdminNavLinks from '@/components/AdminNavLinks'
 
 const CONV = 0.00064516
 const MOUNTS = ['Inside','Outside']
@@ -406,7 +405,7 @@ export default function AdminProjectPage() {
   }
 
   // ── NEW: INVOICES ────────────────────────────────────────
-  const billedPct = invoices.reduce((s,i)=>s+Number(i.pct_of_total||0),0)
+  const billedPct = invoices.filter(i=>i.status!=='void').reduce((s,i)=>s+Number(i.pct_of_total||0),0)
   const paidPct = invoices.filter(i=>i.status==='paid').reduce((s,i)=>s+Number(i.pct_of_total||0),0)
   const remainingPct = 100 - billedPct
   const paidAmount = invoices.filter(i=>i.status==='paid').reduce((s,i)=>s+Number(i.total_amount||0),0)
@@ -449,6 +448,38 @@ export default function AdminProjectPage() {
       showToast('Network/JS error saving invoice: '+err.message,'err')
     } finally { setInvBusy(false) }
   }
+  const voidInvoice = async (invId:string, currentlyVoid:boolean) => {
+    setInvBusy(true)
+    try {
+      const res = await fetch(`/api/invoices/${invId}`, { method:'PATCH', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ action: currentlyVoid?'unvoid':'void' }) })
+      const text = await res.text()
+      let data: any = {}
+      try { data = text ? JSON.parse(text) : {} } catch { showToast('Server returned an unexpected response','err'); return }
+      if (!res.ok) { showToast(data.error||'Could not update','err'); return }
+      setInvoices(prev=>prev.map(i=>i.id===invId?data:i))
+      showToast(currentlyVoid?'Invoice restored':'Invoice voided','ok')
+    } catch (err:any) {
+      showToast('Network/JS error: '+err.message,'err')
+    } finally { setInvBusy(false) }
+  }
+  const [confirmDeleteInv, setConfirmDeleteInv] = useState<string|null>(null)
+  const deleteInvoice = async (invId:string) => {
+    if (confirmDeleteInv!==invId) { setConfirmDeleteInv(invId); setTimeout(()=>setConfirmDeleteInv(p=>p===invId?null:p),3000); return }
+    setConfirmDeleteInv(null)
+    setInvBusy(true)
+    try {
+      const res = await fetch(`/api/invoices/${invId}`, { method:'DELETE' })
+      const text = await res.text()
+      let data: any = {}
+      try { data = text ? JSON.parse(text) : {} } catch { showToast('Server returned an unexpected response','err'); return }
+      if (!res.ok) { showToast(data.error||'Could not delete','err'); return }
+      setInvoices(prev=>prev.filter(i=>i.id!==invId))
+      showToast('Invoice deleted','ok')
+    } catch (err:any) {
+      showToast('Network/JS error: '+err.message,'err')
+    } finally { setInvBusy(false) }
+  }
   const markInvoicePaid = async (invId:string, paid:boolean) => {
     setInvBusy(true)
     try {
@@ -466,17 +497,17 @@ export default function AdminProjectPage() {
   }
   const emailInvoice = async (inv:Invoice) => {
     const subject = `Invoice ${inv.invoice_number} — ${inv.status==='paid'?'Payment Confirmation':`Due ${fmt(inv.total_amount||0)}`}`
-    const body = `Hi ${project?.customers?.name||''},\n\nPlease find your invoice ${inv.invoice_number} for ${project?.name} below.\n\n${(inv.invoice_type||'').toUpperCase()} — ${inv.pct_of_total}% of project total\nAmount Due: ${fmt(inv.total_amount||0)}\n\nThank you,\nCustom Elegant Blinds`
+    const body = `Hi ${project?.customers?.name||''},\n\nPlease find your invoice ${inv.invoice_number} for ${project?.name} attached as a PDF.\n\n${(inv.invoice_type||'').toUpperCase()} — ${inv.pct_of_total}% of project total\nAmount Due: ${fmt(inv.total_amount||0)}\n\nThank you,\nCustom Elegant Blinds`
     setInvBusy(true)
     try {
       const res = await fetch('/api/emails', { method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ projectId:id, toEmail:project?.customers?.email||project?.email, subject, body }) })
+        body: JSON.stringify({ projectId:id, toEmail:project?.customers?.email||project?.email, subject, body, invoiceId: inv.id }) })
       const text = await res.text()
       let data: any = {}
       try { data = text ? JSON.parse(text) : {} } catch { showToast('Server returned an unexpected response (not JSON). Status '+res.status,'err'); return }
       if (!res.ok) { showToast(data.error||'Could not send email','err'); return }
       setEmails(prev=>[data, ...prev])
-      if (data.delivered) showToast('Invoice emailed to customer','ok')
+      if (data.delivered) showToast('Invoice emailed to customer (PDF attached)','ok')
       else showToast('Logged, but not actually delivered: '+(data.deliveryError||'unknown error'),'err')
     } catch (err:any) {
       showToast('Network/JS error emailing invoice: '+err.message,'err')
@@ -633,8 +664,6 @@ export default function AdminProjectPage() {
       if (!res.ok) { showToast(data.error||'Could not send','err'); return }
       setEmails(prev=>[data, ...prev])
       setShowSendEmail(false)
-      if (data.delivered) showToast('Email sent','ok')
-      else showToast('Logged, but not actually delivered: '+(data.deliveryError||'unknown error'),'err')
     } catch (err:any) {
       showToast('Network/JS error sending email: '+err.message,'err')
     } finally { setEmailBusy(false) }
@@ -732,10 +761,11 @@ export default function AdminProjectPage() {
     <div style={{display:'flex',flexDirection:'column',height:'100vh',fontFamily:'Inter,sans-serif',background:'#F7F4EF',color:'#1C1C1E'}}>
       {/* HEADER */}
       <header style={{height:56,background:'#1C1C1E',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 18px',flexShrink:0}}>
-        <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
           <a href="/admin" title="Home"><img src="/ceb-logo.jpg" alt="CEB" style={{width:36,height:36,objectFit:'contain',flexShrink:0,cursor:'pointer'}}/></a>
-          <span style={{color:'#fff',fontFamily:'Playfair Display,serif',fontSize:15,whiteSpace:'nowrap'}}>{project.name}</span>
-          <span style={{color:'#9AA5B4',fontSize:11,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{project.customers?.name} · {project.address||project.email}</span>
+          <button style={{border:'none',padding:'5px 12px',borderRadius:6,fontSize:12,fontFamily:'Inter,sans-serif',fontWeight:600,cursor:'pointer',background:'rgba(255,255,255,.1)',color:'#fff'}} onClick={()=>router.push('/admin/home')}>← Project Home</button>
+          <span style={{color:'#fff',fontFamily:'Playfair Display,serif',fontSize:15}}>{project.name}</span>
+          <span style={{color:'#9AA5B4',fontSize:11}}>{project.customers?.name} · {project.address||project.email}</span>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           {project.confirmed_at ? (
@@ -752,7 +782,6 @@ export default function AdminProjectPage() {
           }} style={{fontSize:12,padding:'4px 8px',borderRadius:6,border:'1px solid #555',background:'#333',color:'#fff',cursor:'pointer'}}>
             {['draft','sent','viewed','confirmed','invoiced','completed','cancelled'].map(s=><option key={s} value={s}>{s}</option>)}
           </select>
-          <AdminNavLinks active="project"/>
         </div>
       </header>
 
@@ -1356,21 +1385,35 @@ export default function AdminProjectPage() {
                     const isExp = !!expandedInv[inv.id]
                     const editable = inv.status!=='paid'
                     return (
-                      <div key={inv.id} style={{borderBottom:'1px solid #E2DDD6'}}>
+                      <div key={inv.id} style={{borderBottom:'1px solid #E2DDD6',opacity:inv.status==='void'?0.55:1}}>
                         <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',flexWrap:'wrap'}}>
                           <div style={{width:28,height:28,borderRadius:'50%',background:'#F7F4EF',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:'#8B6914'}}>#{inv.sequence_num}</div>
                           <div style={{flex:1,minWidth:140}}>
-                            <div style={{fontSize:13,fontWeight:600}}>{inv.invoice_number} <span style={{fontWeight:400,color:'#9AA5B4',fontSize:11}}>({inv.invoice_type})</span></div>
+                            <div style={{fontSize:13,fontWeight:600,textDecoration:inv.status==='void'?'line-through':'none'}}>{inv.invoice_number} <span style={{fontWeight:400,color:'#9AA5B4',fontSize:11}}>({inv.invoice_type})</span></div>
                             <div style={{fontSize:11,color:'#9AA5B4'}}>{inv.pct_of_total}% of total {inv.status==='paid'?`· paid ${new Date(inv.fully_paid_at||'').toLocaleString()}`:'· '+inv.status}</div>
                           </div>
                           <span style={{fontSize:11,fontWeight:600,padding:'3px 9px',borderRadius:10,background:inv.payment_method==='square'?'#EDE9FF':'#D1FAE5',color:inv.payment_method==='square'?'#7C3AED':'#27AE60'}}>
                             {inv.payment_method==='square'?`💳 Square (+${fmt(inv.square_surcharge||0)})`:'💵 Cash'}
                           </span>
                           <div style={{fontSize:14,fontWeight:700,color:'#8B6914'}}>{fmt(inv.total_amount||0)}</div>
-                          <button disabled={invBusy} onClick={()=>markInvoicePaid(inv.id, inv.status!=='paid')} style={{border:'none',padding:'6px 12px',borderRadius:6,fontSize:11,fontWeight:700,cursor:'pointer',background:inv.status==='paid'?'#D1FAE5':'#FEE2E2',color:inv.status==='paid'?'#065F46':'#E53E3E'}}>
-                            {inv.status==='paid'?'✓ PAID':'✕ UNPAID'}
-                          </button>
+                          {inv.status!=='void' && (
+                            <button disabled={invBusy} onClick={()=>markInvoicePaid(inv.id, inv.status!=='paid')} style={{border:'none',padding:'6px 12px',borderRadius:6,fontSize:11,fontWeight:700,cursor:'pointer',background:inv.status==='paid'?'#D1FAE5':'#FEE2E2',color:inv.status==='paid'?'#065F46':'#E53E3E'}}>
+                              {inv.status==='paid'?'✓ PAID':'✕ UNPAID'}
+                            </button>
+                          )}
                           <button onClick={()=>toggleInvExpand(inv.id)} style={{border:'1px solid #E2DDD6',background:'#fff',padding:'6px 12px',borderRadius:6,fontSize:11,cursor:'pointer'}}>{isExp?'Hide':'👁 View / Send'}</button>
+                          {inv.status!=='paid' && (
+                            <button disabled={invBusy} onClick={()=>voidInvoice(inv.id, inv.status==='void')} title={inv.status==='void'?'Restore this invoice':'Void — keeps the record but removes it from balance owed'}
+                              style={{border:'1px solid #E2DDD6',background:'#fff',color:'#92400E',padding:'6px 10px',borderRadius:6,fontSize:11,cursor:'pointer'}}>
+                              {inv.status==='void'?'↺ Restore':'🚫 Void'}
+                            </button>
+                          )}
+                          {inv.status!=='paid' && (
+                            <button disabled={invBusy} onClick={()=>deleteInvoice(inv.id)} title="Only allowed if this invoice has no payment history"
+                              style={{border:'1px solid #FECACA',background:confirmDeleteInv===inv.id?'#E53E3E':'#fff',color:confirmDeleteInv===inv.id?'#fff':'#E53E3E',padding:'6px 10px',borderRadius:6,fontSize:11,cursor:'pointer'}}>
+                              {confirmDeleteInv===inv.id?'Confirm?':'🗑 Delete'}
+                            </button>
+                          )}
                         </div>
                         {isExp && (
                           <div style={{padding:'0 16px 16px'}}>
@@ -1585,7 +1628,7 @@ export default function AdminProjectPage() {
                     <input value={emailSubject} onChange={e=>setEmailSubject(e.target.value)} style={{width:'100%',padding:'7px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12,marginBottom:10}}/>
                     <label style={{display:'block',fontSize:10,fontWeight:700,color:'#4A5568',marginBottom:3}}>Body</label>
                     <textarea value={emailBody} onChange={e=>setEmailBody(e.target.value)} rows={6} style={{width:'100%',padding:'7px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12,marginBottom:10,fontFamily:'Inter,sans-serif'}}/>
-                    <div style={{fontSize:10,color:'#9AA5B4',marginBottom:10}}>Sent via Resend. Until a sending domain is verified, delivery is limited to the email your Resend account is registered with.</div>
+                    <div style={{fontSize:10,color:'#9AA5B4',marginBottom:10}}>Actual delivery via Resend isn't wired up yet — this logs the send for now.</div>
                     <div style={{display:'flex',gap:8}}>
                       <button disabled={emailBusy} onClick={sendCustomEmail} style={{background:'#0D9488',color:'#fff',border:'none',padding:'8px 16px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer'}}>{emailBusy?'Sending…':'Send'}</button>
                       <button onClick={()=>setShowSendEmail(false)} style={{background:'#fff',border:'1px solid #E2DDD6',padding:'8px 16px',borderRadius:6,fontSize:12,cursor:'pointer'}}>Cancel</button>

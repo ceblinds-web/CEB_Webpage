@@ -8,7 +8,7 @@
 // Logs (Project -> Logs, or the Functions tab on a deployment) show exactly
 // what happened server-side, since the client-side toast alone wasn't enough
 // to diagnose a "success reported, but Resend shows nothing" mismatch.
-export async function sendEmail(params: { to: string; subject: string; text: string; html?: string }) {
+export async function sendEmail(params: { to: string; subject: string; text: string; html?: string; attachments?: { filename: string; content: string }[] }) {
   const apiKey = process.env.RESEND_API_KEY
   console.log('[resend] sendEmail called. to=%s subject=%s apiKeyPresent=%s apiKeyPrefix=%s',
     params.to, params.subject, !!apiKey, apiKey ? apiKey.slice(0, 6) + '…' : 'none')
@@ -38,6 +38,7 @@ export async function sendEmail(params: { to: string; subject: string; text: str
         subject: params.subject,
         text: params.text,
         html: params.html || `<pre style="font-family:inherit;white-space:pre-wrap">${params.text}</pre>`,
+        ...(params.attachments?.length ? { attachments: params.attachments } : {}),
       }),
     })
 
