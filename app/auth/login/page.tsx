@@ -62,6 +62,9 @@ export default function LoginPage() {
           <p style={{textAlign:'center',marginTop:20,fontSize:12,color:'#9AA5B4'}}>
             No account? <a href="/auth/register" style={{color:'#8B6914',fontWeight:600,textDecoration:'none'}}>Register</a>
           </p>
+          <p style={{textAlign:'center',marginTop:8,fontSize:12,color:'#9AA5B4'}}>
+            <a href="/catalog" style={{color:'#9AA5B4',textDecoration:'none'}}>← Browse our fabric catalog</a>
+          </p>
         </div>
       </div>
     </div>

@@ -22,7 +22,7 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   const path = request.nextUrl.pathname
   // Public routes — no auth needed
-  if (path.startsWith('/auth') || path.startsWith('/quote')) {
+  if (path.startsWith('/auth') || path.startsWith('/quote') || path.startsWith('/catalog')) {
     return supabaseResponse
   }
   // Not logged in → redirect to login
