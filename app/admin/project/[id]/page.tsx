@@ -39,6 +39,9 @@ export default function AdminProjectPage() {
   const lastCellRef = useRef<HTMLInputElement | HTMLSelectElement | null>(null)
 
   const [project, setProject] = useState<any>(null)
+  const [showEditProject, setShowEditProject] = useState(false)
+  const [editProjectForm, setEditProjectForm] = useState({name:'',email:'',phone:'',address:''})
+  const [savingProjectInfo, setSavingProjectInfo] = useState(false)
   const [rows, setRows] = useState<Row[]>([])
   const [config, setConfig] = useState<Config>({ tax_pct:10, shipping_pct:18, discount_pct:0, discount_reason:'', installation:500 })
   const [products, setProducts] = useState<Product[]>([])
@@ -261,6 +264,26 @@ export default function AdminProjectPage() {
 
   // ── PUSH STATE ───────────────────────────────────────────
   const markDirty = () => setIsPushed(false)
+  const openEditProject = () => {
+    setEditProjectForm({ name: project?.name||'', email: project?.email||'', phone: project?.phone||'', address: project?.address||'' })
+    setShowEditProject(true)
+  }
+  const saveProjectInfo = async () => {
+    if (!editProjectForm.name.trim()) return showToast('Project name is required','err')
+    setSavingProjectInfo(true)
+    try {
+      const res = await fetch(`/api/projects/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(editProjectForm) })
+      const text = await res.text()
+      let data: any = {}
+      try { data = text ? JSON.parse(text) : {} } catch { showToast('Server returned an unexpected response','err'); return }
+      if (!res.ok) { showToast(data.error||'Could not save project info','err'); return }
+      setProject((p:any)=>({...p, ...editProjectForm}))
+      setShowEditProject(false)
+      showToast('Project info updated','ok')
+    } catch (err:any) {
+      showToast('Network error: '+err.message,'err')
+    } finally { setSavingProjectInfo(false) }
+  }
 
   // ── PRODUCTS / MOTORS MANAGEMENT ─────────────────────────
   const updProduct = async (pid: string, field: string, val: number) => {
@@ -831,6 +854,8 @@ export default function AdminProjectPage() {
           <button style={{border:'none',padding:'5px 12px',borderRadius:6,fontSize:12,fontFamily:'Inter,sans-serif',fontWeight:600,cursor:'pointer',background:'rgba(255,255,255,.1)',color:'#fff'}} onClick={()=>router.push('/admin/home')}>← Project Home</button>
           <span style={{color:'#fff',fontFamily:'Playfair Display,serif',fontSize:15}}>{project.name}</span>
           <span style={{color:'#9AA5B4',fontSize:11}}>{project.customers?.name} · {project.address||project.email}</span>
+          <button onClick={openEditProject} title="Edit project name, phone, email, address"
+            style={{border:'1px solid rgba(255,255,255,.15)',background:'rgba(255,255,255,.06)',color:'#C9A84C',padding:'4px 9px',borderRadius:5,fontSize:11,cursor:'pointer'}}>✎ Edit</button>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           {project.confirmed_at ? (
@@ -1256,6 +1281,11 @@ export default function AdminProjectPage() {
                     {fabricEditForm && (
                       <div style={{border:'1px solid #E2DDD6',borderRadius:8,padding:12,background:'#FAFAFA'}}>
                         <div style={{fontSize:11,fontWeight:700,color:'#4A5568',marginBottom:8}}>Editing {fabricEditForm.code}</div>
+                        <div style={{fontSize:10,color:'#9AA5B4',marginBottom:10}}>
+                          Catalog photo: <a href={`/catalog/${fabricEditForm.category}/${(fabricEditForm.vendor||'unsorted').toLowerCase()}/series-${fabricEditForm.series}.jpg`} target="_blank" rel="noreferrer" style={{color:'#8B6914'}}>
+                            /catalog/{fabricEditForm.category}/{(fabricEditForm.vendor||'unsorted').toLowerCase()}/series-{fabricEditForm.series}.jpg
+                          </a> {fabricEditForm.vendor && <span>· vendor: <strong>{fabricEditForm.vendor}</strong></span>}
+                        </div>
                         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))',gap:8,marginBottom:10}}>
                           <div><label style={{fontSize:9,color:'#9AA5B4',display:'block'}}>Code</label><input value={fabricEditForm.code} onChange={e=>setFabricEditForm(p=>p?{...p,code:e.target.value}:p)} style={{width:'100%',padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/></div>
                           <div><label style={{fontSize:9,color:'#9AA5B4',display:'block'}}>Series</label><input value={fabricEditForm.series} onChange={e=>setFabricEditForm(p=>p?{...p,series:e.target.value}:p)} style={{width:'100%',padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/></div>
@@ -1802,6 +1832,30 @@ export default function AdminProjectPage() {
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
               <button onClick={()=>setShowNewCustomer(false)} style={{background:'#F7F4EF',border:'1px solid #E2DDD6',color:'#4A5568',padding:'8px 16px',borderRadius:6,fontSize:12,cursor:'pointer'}}>Cancel</button>
               <button disabled={newCustBusy} onClick={createCustomer} style={{background:'#C9A84C',color:'#1C1C1E',border:'none',padding:'8px 16px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer'}}>{newCustBusy?'Creating…':'Create Customer'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEditProject && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:998}} onClick={()=>setShowEditProject(false)}>
+          <div style={{background:'#fff',borderRadius:12,padding:24,width:400,maxWidth:'90vw',boxShadow:'0 24px 64px rgba(0,0,0,.25)'}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontFamily:'Playfair Display,serif',fontSize:17,marginBottom:16}}>Edit Project Info</div>
+            <label style={{display:'block',fontSize:11,fontWeight:700,color:'#4A5568',marginBottom:4}}>Project Name *</label>
+            <input value={editProjectForm.name} onChange={e=>setEditProjectForm(p=>({...p,name:e.target.value}))} autoFocus
+              style={{width:'100%',padding:'8px 10px',border:'1px solid #E2DDD6',borderRadius:6,fontSize:13,marginBottom:12,boxSizing:'border-box'}}/>
+            <label style={{display:'block',fontSize:11,fontWeight:700,color:'#4A5568',marginBottom:4}}>Email</label>
+            <input value={editProjectForm.email} onChange={e=>setEditProjectForm(p=>({...p,email:e.target.value}))} type="email"
+              style={{width:'100%',padding:'8px 10px',border:'1px solid #E2DDD6',borderRadius:6,fontSize:13,marginBottom:12,boxSizing:'border-box'}}/>
+            <label style={{display:'block',fontSize:11,fontWeight:700,color:'#4A5568',marginBottom:4}}>Phone</label>
+            <input value={editProjectForm.phone} onChange={e=>setEditProjectForm(p=>({...p,phone:e.target.value}))}
+              style={{width:'100%',padding:'8px 10px',border:'1px solid #E2DDD6',borderRadius:6,fontSize:13,marginBottom:12,boxSizing:'border-box'}}/>
+            <label style={{display:'block',fontSize:11,fontWeight:700,color:'#4A5568',marginBottom:4}}>Address</label>
+            <input value={editProjectForm.address} onChange={e=>setEditProjectForm(p=>({...p,address:e.target.value}))}
+              style={{width:'100%',padding:'8px 10px',border:'1px solid #E2DDD6',borderRadius:6,fontSize:13,marginBottom:18,boxSizing:'border-box'}}/>
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+              <button onClick={()=>setShowEditProject(false)} style={{background:'#F7F4EF',border:'1px solid #E2DDD6',color:'#4A5568',padding:'8px 16px',borderRadius:6,fontSize:12,cursor:'pointer'}}>Cancel</button>
+              <button disabled={savingProjectInfo} onClick={saveProjectInfo} style={{background:'#C9A84C',color:'#1C1C1E',border:'none',padding:'8px 16px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer'}}>{savingProjectInfo?'Saving…':'Save Changes'}</button>
             </div>
           </div>
         </div>
