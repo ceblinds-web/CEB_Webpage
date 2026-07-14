@@ -1060,15 +1060,9 @@ export default function AdminProjectPage() {
               <button onClick={doPush} disabled={pushing} style={{display:'flex',alignItems:'center',gap:3,padding:'5px 9px',border:'none',background:'#27AE60',color:'#fff',borderRadius:5,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>{pushing?'Pushing…':'⬆ Push to Customer'}</button>
               <span style={{marginLeft:'auto',fontSize:11,color:'#8B6914',background:'#F7F4EF',border:'1px solid #E2DDD6',borderRadius:4,padding:'3px 10px',whiteSpace:'nowrap'}}>Total: <strong>{fmt(grand)}</strong></span>
             </div>
-            <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:14,padding:'8px 14px',background:'#fff',borderBottom:'1px solid #E2DDD6',flexShrink:0,flexWrap:'wrap'}}>
-              <span style={{fontSize:10,color:'#9AA5B4'}}>Blinds <strong style={{color:'#1C1C1E',fontWeight:600}}>{fmt(totB*(1-config.discount_pct/100))}</strong></span>
-              <span style={{fontSize:10,color:'#9AA5B4'}}>Motors <strong style={{color:'#1C1C1E',fontWeight:600}}>{fmt(totM*(1-config.discount_pct/100))}</strong></span>
-              {config.discount_pct>0 && <span style={{fontSize:10,color:'#27AE60'}}>Discount ({config.discount_pct}%) <strong>-{fmt((totB+totM)*config.discount_pct/100)}</strong></span>}
-              <span style={{fontSize:10,color:'#9AA5B4'}}>Tax <strong style={{color:'#1C1C1E',fontWeight:600}}>{fmt(tax)}</strong></span>
-              <span style={{fontSize:10,color:'#9AA5B4'}}>Shipping <strong style={{color:'#1C1C1E',fontWeight:600}}>{fmt(ship)}</strong></span>
-              <span style={{fontSize:10,color:'#9AA5B4'}}>Installation <strong style={{color:'#1C1C1E',fontWeight:600}}>{fmt(config.installation)}</strong></span>
-              <span style={{width:1,height:16,background:'#E2DDD6'}}/>
-              <span style={{fontSize:13,color:'#8B6914',fontWeight:700}}>Project Total: {fmt(grand)}</span>
+            <div style={{display:'flex',justifyContent:'flex-end',alignItems:'baseline',gap:10,padding:'10px 16px 4px',background:'#fff',flexShrink:0,flexWrap:'wrap'}}>
+              <span style={{fontFamily:"'Brush Script MT','Segoe Script',cursive",fontSize:22,color:'#C0392B',lineHeight:1}}>{project.name}</span>
+              {project.address && <span style={{fontFamily:"'Brush Script MT','Segoe Script',cursive",fontSize:15,color:'#C0392B',opacity:.8,lineHeight:1}}>{project.address}</span>}
             </div>
             <div className="sheet-scroll" style={{flex:1,overflow:'auto'}}>
               <table style={{borderCollapse:'collapse',minWidth:'100%',fontSize:12}}>
@@ -1180,11 +1174,18 @@ export default function AdminProjectPage() {
                 </tfoot>
               </table>
             </div>
-            <div style={{height:26,background:'#1C1C1E',display:'flex',alignItems:'center',padding:'0 14px',gap:16}}>
+            <div style={{minHeight:26,background:'#1C1C1E',display:'flex',alignItems:'center',padding:'6px 14px',gap:14,flexWrap:'wrap'}}>
               <span style={{fontSize:10,color:'#9AA5B4'}}>Rows: <span style={{color:'#C9A84C',fontWeight:600}}>{dataRows.length}</span></span>
               <span style={{fontSize:10,color:'#9AA5B4'}}>Press Enter in Remarks to add a new row</span>
-              <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:8}}>
-                <span style={{color:'rgba(255,255,255,.3)',fontSize:10}}>TOTAL</span>
+              <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
+                <span style={{fontSize:10,color:'rgba(255,255,255,.4)'}}>Blinds <strong style={{color:'rgba(255,255,255,.75)',fontWeight:600}}>{fmt(totB*(1-config.discount_pct/100))}</strong></span>
+                <span style={{fontSize:10,color:'rgba(255,255,255,.4)'}}>Motors <strong style={{color:'rgba(255,255,255,.75)',fontWeight:600}}>{fmt(totM*(1-config.discount_pct/100))}</strong></span>
+                {config.discount_pct>0 && <span style={{fontSize:10,color:'#6EE7A0'}}>Discount ({config.discount_pct}%) <strong>-{fmt((totB+totM)*config.discount_pct/100)}</strong></span>}
+                <span style={{fontSize:10,color:'rgba(255,255,255,.4)'}}>Tax <strong style={{color:'rgba(255,255,255,.75)',fontWeight:600}}>{fmt(tax)}</strong></span>
+                <span style={{fontSize:10,color:'rgba(255,255,255,.4)'}}>Shipping <strong style={{color:'rgba(255,255,255,.75)',fontWeight:600}}>{fmt(ship)}</strong></span>
+                <span style={{fontSize:10,color:'rgba(255,255,255,.4)'}}>Installation <strong style={{color:'rgba(255,255,255,.75)',fontWeight:600}}>{fmt(config.installation)}</strong></span>
+                <span style={{width:1,height:16,background:'rgba(255,255,255,.15)'}}/>
+                <span style={{color:'rgba(255,255,255,.3)',fontSize:10}}>PROJECT TOTAL</span>
                 <span style={{color:'#C9A84C',fontSize:14,fontWeight:700}}>{fmt(grand)}</span>
               </div>
             </div>
