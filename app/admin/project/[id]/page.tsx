@@ -39,14 +39,15 @@ export default function AdminProjectPage() {
   const lastCellRef = useRef<HTMLInputElement | HTMLSelectElement | null>(null)
 
   const [project, setProject] = useState<any>(null)
+  const [showEditProject, setShowEditProject] = useState(false)
+  const [editProjectForm, setEditProjectForm] = useState({name:'',email:'',phone:'',address:''})
+  const [savingProjectInfo, setSavingProjectInfo] = useState(false)
   const [rows, setRows] = useState<Row[]>([])
   const [config, setConfig] = useState<Config>({ tax_pct:10, shipping_pct:18, discount_pct:0, discount_reason:'', installation:500 })
   const [products, setProducts] = useState<Product[]>([])
   const [motors, setMotors] = useState<Motor[]>([])
-  const [fabrics, setFabrics] = useState<Fabric[]>([])
-  const fabricOptions = Array.from(new Set([...fabrics.map(f=>f.code), ...FABRICS_DEFAULT]))
   const [selId, setSelId] = useState<string|null>(null)
-  const [tab, setTab] = useState<'sheet'|'purchase'|'summary'|'invoices'|'grievances'|'email'>('sheet')
+  const [tab, setTab] = useState<'sheet'|'purchase'|'summary'|'invoices'|'grievances'|'email'|'vendor'>('sheet')
   const [pushing, setPushing] = useState(false)
   const [fees, setFees] = useState<Fee[]>([])
   const [sendingEmail, setSendingEmail] = useState(false)
@@ -57,17 +58,16 @@ export default function AdminProjectPage() {
   const [importStatus, setImportStatus] = useState<{msg:string; type:'ok'|'error'|'info'}|null>(null)
   const [newProdName, setNewProdName] = useState(''); const [newProdCost, setNewProdCost] = useState(15); const [newProdFactor, setNewProdFactor] = useState(5)
   const [newMotorName, setNewMotorName] = useState(''); const [newMotorCost, setNewMotorCost] = useState(30); const [newMotorFactor, setNewMotorFactor] = useState(3)
-  const [selectedFabricId, setSelectedFabricId] = useState('')
-  const [fabricEditForm, setFabricEditForm] = useState<{code:string,series:string,vendor:string,category:string,cost_cordless:number,cost_beadchain:number}|null>(null)
-  const [fabricSearch, setFabricSearch] = useState('')
-  const [showAddFabric, setShowAddFabric] = useState(false)
-  const [newFabricForm, setNewFabricForm] = useState({code:'',series:'',vendor:'',category:'zebra',cost_cordless:0,cost_beadchain:0})
-  const [fabricBusy, setFabricBusy] = useState(false)
 
   // ── NEW: Invoices / Grievances / Email state ──
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [grievances, setGrievances] = useState<Grievance[]>([])
   const [emails, setEmails] = useState<ManualEmail[]>([])
+  const [vendorCatalog, setVendorCatalog] = useState<any[]>([])
+  const [selectedVendor, setSelectedVendor] = useState<string|null>(null)
+  const [selectedVendorCat, setSelectedVendorCat] = useState<string|null>(null)
+  const [editingVendorRow, setEditingVendorRow] = useState<string|null>(null)
+  const [vendorEditForm, setVendorEditForm] = useState<any>(null)
   const [showAddInvoice, setShowAddInvoice] = useState(false)
   const [newInvPct, setNewInvPct] = useState(30)
   const [newInvMethod, setNewInvMethod] = useState<'cash'|'square'>('cash')
@@ -124,7 +124,6 @@ export default function AdminProjectPage() {
     }).catch(()=>setLoadError(true))
     fetch('/api/products', { cache:'no-store' }).then(r=>r.json()).then(setProducts).catch(()=>setProducts([]))
     fetch('/api/motors', { cache:'no-store' }).then(r=>r.json()).then(setMotors).catch(()=>setMotors([]))
-    fetch('/api/fabrics', { cache:'no-store' }).then(r=>r.json()).then(setFabrics).catch(()=>setFabrics([]))
     fetch('/api/customers', { cache:'no-store' }).then(r=>r.json()).then(setCustomers).catch(()=>setCustomers([]))
     // Invoices/grievances/emails load in parallel but don't gate the initial render —
     // the Sheet tab (the default) doesn't need any of them.
@@ -134,6 +133,7 @@ export default function AdminProjectPage() {
     fetch(`/api/invoices?projectId=${id}`, { cache:'no-store' }).then(r=>r.json()).then(setInvoices).catch(()=>setInvoices([]))
     fetch(`/api/grievances?projectId=${id}`, { cache:'no-store' }).then(r=>r.json()).then(setGrievances).catch(()=>setGrievances([]))
     fetch(`/api/emails?projectId=${id}`, { cache:'no-store' }).then(r=>r.json()).then(setEmails).catch(()=>setEmails([]))
+    fetch('/api/vendor-catalog', { cache:'no-store' }).then(r=>r.json()).then(setVendorCatalog).catch(()=>setVendorCatalog([]))
   }
   useEffect(loadAll, [id])
 
@@ -152,15 +152,10 @@ export default function AdminProjectPage() {
   // fabric value that isn't a recognized catalog code — keeps existing
   // projects using old-style fabric names (YX2501, Standard, etc.) working
   // exactly as before.
-  const getFabricCost = (r:Row): number|null => {
-    const fab = fabrics.find(f=>f.code===r.fabric)
-    if (!fab) return null
-    return /chain/i.test(r.control||'') ? fab.cost_beadchain : fab.cost_cordless
-  }
-  const blindsQ = (r:Row) => { const p=getProd(r.blind_type); const cost=getFabricCost(r)??p.my_cost_per_sqm; return Math.round(sqm(r.width_in,r.height_in)*cost*p.factor*100)/100*(r.qty||1) }
+  const blindsQ = (r:Row) => { const p=getProd(r.blind_type); return Math.round(sqm(r.width_in,r.height_in)*p.my_cost_per_sqm*p.factor*100)/100*(r.qty||1) }
   const motorQ = (r:Row) => { const m=getMtr(r.control); return m.my_cost_per_unit*m.factor*(r.qty||1) }
   // raw purchase cost (no factor) — what CEB actually pays, used for In-Pocket
-  const blindsCost = (r:Row) => { const p=getProd(r.blind_type); const cost=getFabricCost(r)??p.my_cost_per_sqm; return Math.round(sqm(r.width_in,r.height_in)*cost*100)/100*(r.qty||1) }
+  const blindsCost = (r:Row) => { const p=getProd(r.blind_type); return Math.round(sqm(r.width_in,r.height_in)*p.my_cost_per_sqm*100)/100*(r.qty||1) }
   const motorCost = (r:Row) => { const m=getMtr(r.control); return m.my_cost_per_unit*(r.qty||1) }
   const lineTotal = (r:Row) => (blindsQ(r)+motorQ(r))*(1-config.discount_pct/100)
   const fmt = (n:number) => (n<0?'-':'')+'$'+Math.abs(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',')
@@ -261,6 +256,26 @@ export default function AdminProjectPage() {
 
   // ── PUSH STATE ───────────────────────────────────────────
   const markDirty = () => setIsPushed(false)
+  const openEditProject = () => {
+    setEditProjectForm({ name: project?.name||'', email: project?.email||'', phone: project?.phone||'', address: project?.address||'' })
+    setShowEditProject(true)
+  }
+  const saveProjectInfo = async () => {
+    if (!editProjectForm.name.trim()) return showToast('Project name is required','err')
+    setSavingProjectInfo(true)
+    try {
+      const res = await fetch(`/api/projects/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(editProjectForm) })
+      const text = await res.text()
+      let data: any = {}
+      try { data = text ? JSON.parse(text) : {} } catch { showToast('Server returned an unexpected response','err'); return }
+      if (!res.ok) { showToast(data.error||'Could not save project info','err'); return }
+      setProject((p:any)=>({...p, ...editProjectForm}))
+      setShowEditProject(false)
+      showToast('Project info updated','ok')
+    } catch (err:any) {
+      showToast('Network error: '+err.message,'err')
+    } finally { setSavingProjectInfo(false) }
+  }
 
   // ── PRODUCTS / MOTORS MANAGEMENT ─────────────────────────
   const updProduct = async (pid: string, field: string, val: number) => {
@@ -319,47 +334,6 @@ export default function AdminProjectPage() {
     showToast('Motor/control removed','ok')
   }
 
-  const selectFabricToEdit = (id:string) => {
-    setSelectedFabricId(id)
-    const f = fabrics.find(x=>x.id===id)
-    if (f) setFabricEditForm({ code:f.code, series:f.series, vendor:f.vendor||'', category:f.category, cost_cordless:f.cost_cordless, cost_beadchain:f.cost_beadchain })
-  }
-  const saveFabricEdit = async () => {
-    if (!selectedFabricId || !fabricEditForm) return
-    setFabricBusy(true)
-    try {
-      const res = await fetch(`/api/fabrics/${selectedFabricId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(fabricEditForm) })
-      const data = await res.json()
-      if (!res.ok) { showToast(data.error||'Could not save fabric','err'); return }
-      setFabrics(prev=>prev.map(f=>f.id===selectedFabricId?data:f))
-      showToast('Fabric updated — new rows using it will use this cost','ok')
-    } catch (err:any) { showToast('Network error: '+err.message,'err') } finally { setFabricBusy(false) }
-  }
-  const deactivateFabric = async () => {
-    if (!selectedFabricId) return
-    setFabricBusy(true)
-    try {
-      const res = await fetch(`/api/fabrics/${selectedFabricId}`, { method:'DELETE' })
-      if (!res.ok) { showToast('Could not remove fabric','err'); return }
-      setFabrics(prev=>prev.filter(f=>f.id!==selectedFabricId))
-      setSelectedFabricId(''); setFabricEditForm(null)
-      showToast('Fabric marked unavailable (existing rows using it are unaffected)','ok')
-    } catch (err:any) { showToast('Network error: '+err.message,'err') } finally { setFabricBusy(false) }
-  }
-  const addFabric = async () => {
-    if (!newFabricForm.code.trim() || !newFabricForm.series.trim()) return showToast('Code and series are required','err')
-    setFabricBusy(true)
-    try {
-      const res = await fetch('/api/fabrics', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(newFabricForm) })
-      const data = await res.json()
-      if (!res.ok) { showToast(data.error||'Could not add fabric','err'); return }
-      setFabrics(prev=>[...prev, data].sort((a,b)=>a.series.localeCompare(b.series)||a.code.localeCompare(b.code)))
-      setNewFabricForm({code:'',series:'',vendor:newFabricForm.vendor,category:newFabricForm.category,cost_cordless:0,cost_beadchain:0})
-      setShowAddFabric(false)
-      showToast('Fabric added','ok')
-    } catch (err:any) { showToast('Network error: '+err.message,'err') } finally { setFabricBusy(false) }
-  }
-  const filteredFabrics = fabrics.filter(f => !fabricSearch.trim() || f.code.toLowerCase().includes(fabricSearch.toLowerCase()) || f.series.includes(fabricSearch) || (f.vendor||'').toLowerCase().includes(fabricSearch.toLowerCase()))
 
   // ── NEW: SIDEBAR CUSTOMER/PROJECT MANAGEMENT (inline forms, no native dialogs) ──
   const openAddProjectForm = (customerId:string) => {
@@ -545,6 +519,27 @@ export default function AdminProjectPage() {
       showToast('Network/JS error: '+err.message,'err')
     } finally { setInvBusy(false) }
   }
+  const [paymentLinks, setPaymentLinks] = useState<Record<string,string>>({})
+  const [linkBusy, setLinkBusy] = useState<string|null>(null)
+  const [linkCopied, setLinkCopied] = useState<string|null>(null)
+  const getPaymentLink = async (inv:Invoice) => {
+    setLinkBusy(inv.id)
+    try {
+      const res = await fetch(`/api/invoices/${inv.id}/payment-link`, { method:'POST' })
+      const data = await res.json()
+      if (!res.ok) { showToast(data.error||'Could not generate payment link','err'); return }
+      setPaymentLinks(prev=>({...prev,[inv.id]:data.url}))
+    } catch (err:any) {
+      showToast('Network error: '+err.message,'err')
+    } finally { setLinkBusy(null) }
+  }
+  const copyPaymentLink = (invId:string) => {
+    const url = paymentLinks[invId]
+    if (!url) return
+    navigator.clipboard?.writeText(url)
+    setLinkCopied(invId)
+    setTimeout(()=>setLinkCopied(p=>p===invId?null:p), 2000)
+  }
   const markInvoicePaid = async (invId:string, paid:boolean) => {
     setInvBusy(true)
     try {
@@ -561,10 +556,20 @@ export default function AdminProjectPage() {
     } finally { setInvBusy(false) }
   }
   const emailInvoice = async (inv:Invoice) => {
-    const subject = `Invoice ${inv.invoice_number} — ${inv.status==='paid'?'Payment Confirmation':`Due ${fmt(inv.total_amount||0)}`}`
-    const body = `Hi ${project?.customers?.name||''},\n\nPlease find your invoice ${inv.invoice_number} for ${project?.name} attached as a PDF.\n\n${(inv.invoice_type||'').toUpperCase()} — ${inv.pct_of_total}% of project total\nAmount Due: ${fmt(inv.total_amount||0)}\n\nThank you,\nCustom Elegant Blinds`
     setInvBusy(true)
     try {
+      // Get (or reuse) a Square payment link for unpaid invoices so the
+      // customer has a direct way to pay from the email itself.
+      let payLink = paymentLinks[inv.id] || ''
+      if (!payLink && inv.status!=='paid' && inv.status!=='void') {
+        try {
+          const linkRes = await fetch(`/api/invoices/${inv.id}/payment-link`, { method:'POST' })
+          const linkData = await linkRes.json()
+          if (linkRes.ok && linkData.url) { payLink = linkData.url; setPaymentLinks(prev=>({...prev,[inv.id]:linkData.url})) }
+        } catch { /* non-fatal — email still sends without the link */ }
+      }
+      const subject = `Invoice ${inv.invoice_number} — ${inv.status==='paid'?'Payment Confirmation':`Due ${fmt(inv.total_amount||0)}`}`
+      const body = `Hi ${project?.customers?.name||''},\n\nPlease find your invoice ${inv.invoice_number} for ${project?.name} attached as a PDF.\n\n${(inv.invoice_type||'').toUpperCase()} — ${inv.pct_of_total}% of project total\nAmount Due: ${fmt(inv.total_amount||0)}${payLink?`\n\nPay online: ${payLink}`:''}\n\nThank you,\nCustom Elegant Blinds`
       const res = await fetch('/api/emails', { method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ projectId:id, toEmail:project?.customers?.email||project?.email, subject, body, invoiceId: inv.id }) })
       const text = await res.text()
@@ -744,8 +749,27 @@ export default function AdminProjectPage() {
       if (!wb.SheetNames.length) { setImportStatus({msg:'No sheets found', type:'error'}); return }
       const sheetName = wb.SheetNames.includes('Sheet1') ? 'Sheet1' : wb.SheetNames[0]
       const ws = wb.Sheets[sheetName]
-      const json: any[] = XLSX.utils.sheet_to_json(ws, { defval:'', raw:false })
-      if (!json.length) { setImportStatus({msg:`Sheet "${sheetName}" is empty`, type:'error'}); return }
+
+      // Detect whether row 1 is a real header (column names like "Blind Type",
+      // "Width") or already actual data — some exports (like CEB's original
+      // spreadsheet format) start straight into data with no header row at
+      // all, which silently broke every column match except Location before.
+      const rawRows: any[][] = XLSX.utils.sheet_to_json(ws, { header:1, defval:'', raw:false })
+      const firstRow = rawRows[0]||[]
+      // Primary signal: a real header's first cell is never a bare number —
+      // it's a serial-number DATA row if it is (this catches the case a
+      // pure keyword search can't: a location value like
+      // "B2_Window_Next_to_main_Door" contains "window" as a substring and
+      // would otherwise falsely look like a header).
+      const firstCellIsNumber = String(firstRow[0]||'').trim() !== '' && !isNaN(Number(firstRow[0]))
+      const HEADER_WORDS = ['blind','width','height','location','control','fabric','qty','quantity','remark','mount','valance','rail','description','item','room','window']
+      // Secondary signal: only short label-like cells count as a keyword
+      // match — a long compound location string shouldn't count just
+      // because it happens to contain a header word as a substring.
+      const looksLikeHeader = !firstCellIsNumber && firstRow.some(cell => {
+        const c = String(cell||'').toLowerCase().trim()
+        return c.length > 0 && c.length <= 20 && HEADER_WORDS.some(w => c.includes(w))
+      })
 
       const match = (row:any, candidates:string[]) => {
         for (const key of Object.keys(row)) {
@@ -757,6 +781,22 @@ export default function AdminProjectPage() {
         }
         return ''
       }
+
+      // Fixed column order for headerless sheets: Sr#, Blind Type, Control,
+      // Location, Fabric, Valance, Bottom Rail, Mount, Width, Height, Qty, Remarks
+      const POSITIONAL_COLS = ['_sr','blind type','control','location','fabric','valance','bottom rail','mount','width','height','qty','remark']
+      const toNamedRow = (arr:any[]): any => {
+        const obj: any = {}
+        POSITIONAL_COLS.forEach((name,i)=>{ obj[name] = arr[i] ?? '' })
+        return obj
+      }
+
+      const json: any[] = looksLikeHeader
+        ? XLSX.utils.sheet_to_json(ws, { defval:'', raw:false })
+        : rawRows.filter(r => r.some(c => String(c||'').trim() !== '')).map(toNamedRow)
+
+      if (!json.length) { setImportStatus({msg:`Sheet "${sheetName}" is empty`, type:'error'}); return }
+      setImportStatus({ msg: looksLikeHeader ? `Reading "${file.name}" (header row detected)…` : `Reading "${file.name}" (no header row — using standard column order)…`, type:'info' })
 
       const newRows: Row[] = []
       let added = 0, skipped = 0
@@ -831,6 +871,8 @@ export default function AdminProjectPage() {
           <button style={{border:'none',padding:'5px 12px',borderRadius:6,fontSize:12,fontFamily:'Inter,sans-serif',fontWeight:600,cursor:'pointer',background:'rgba(255,255,255,.1)',color:'#fff'}} onClick={()=>router.push('/admin/home')}>← Project Home</button>
           <span style={{color:'#fff',fontFamily:'Playfair Display,serif',fontSize:15}}>{project.name}</span>
           <span style={{color:'#9AA5B4',fontSize:11}}>{project.customers?.name} · {project.address||project.email}</span>
+          <button onClick={openEditProject} title="Edit project name, phone, email, address"
+            style={{border:'1px solid rgba(255,255,255,.15)',background:'rgba(255,255,255,.06)',color:'#C9A84C',padding:'4px 9px',borderRadius:5,fontSize:11,cursor:'pointer'}}>✎ Edit</button>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           {project.confirmed_at ? (
@@ -951,9 +993,9 @@ export default function AdminProjectPage() {
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
           {/* TABS */}
           <div style={{display:'flex',background:'#fff',borderBottom:'2px solid #E2DDD6',padding:'0 14px',flexShrink:0,overflowX:'auto'}}>
-            {(['sheet','purchase','summary','invoices','grievances','email'] as const).map(t=>{
-              const activeColor = t==='purchase'?'#7C3AED':t==='grievances'?'#E53E3E':t==='invoices'?'#8B6914':t==='email'?'#0D9488':'#C9A84C'
-              const label = t==='sheet'?'📋 Project Sheet':t==='purchase'?'🔧 My Purchase':t==='summary'?'📊 Quote Summary':t==='invoices'?'📄 Invoices':t==='grievances'?'⚠️ Grievances':'✉️ Email'
+            {(['sheet','purchase','summary','invoices','grievances','email','vendor'] as const).map(t=>{
+              const activeColor = t==='purchase'?'#7C3AED':t==='grievances'?'#E53E3E':t==='invoices'?'#8B6914':t==='email'?'#0D9488':t==='vendor'?'#B8860B':'#C9A84C'
+              const label = t==='sheet'?'📋 Project Sheet':t==='purchase'?'🔧 My Purchase':t==='summary'?'📊 Quote Summary':t==='invoices'?'📄 Invoices':t==='grievances'?'⚠️ Grievances':t==='email'?'✉️ Email':'🏭 Vendor'
               return (
                 <div key={t} onClick={()=>setTab(t)} style={{padding:'10px 16px',fontSize:12,fontWeight:tab===t?600:500,color:tab===t?(t==='purchase'?'#7C3AED':'#1C1C1E'):'#9AA5B4',cursor:'pointer',borderBottom:`2px solid ${tab===t?activeColor:'transparent'}`,marginBottom:-2,whiteSpace:'nowrap'}}>
                   {label}
@@ -999,6 +1041,10 @@ export default function AdminProjectPage() {
               <span style={{width:1,height:20,background:'#E2DDD6',margin:'0 4px'}}/>
               <button onClick={doPush} disabled={pushing} style={{display:'flex',alignItems:'center',gap:3,padding:'5px 9px',border:'none',background:'#27AE60',color:'#fff',borderRadius:5,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>{pushing?'Pushing…':'⬆ Push to Customer'}</button>
               <span style={{marginLeft:'auto',fontSize:11,color:'#8B6914',background:'#F7F4EF',border:'1px solid #E2DDD6',borderRadius:4,padding:'3px 10px',whiteSpace:'nowrap'}}>Total: <strong>{fmt(grand)}</strong></span>
+            </div>
+            <div style={{display:'flex',justifyContent:'flex-end',alignItems:'baseline',gap:10,padding:'10px 16px 4px',background:'#fff',flexShrink:0,flexWrap:'wrap'}}>
+              <span style={{fontFamily:"'Playfair Display',serif",fontStyle:'italic',fontWeight:600,fontSize:23,color:'#C0392B',lineHeight:1}}>{project.name}</span>
+              {project.address && <span style={{fontFamily:"'Playfair Display',serif",fontStyle:'italic',fontSize:15,color:'#C0392B',opacity:.8,lineHeight:1}}>{project.address}</span>}
             </div>
             <div className="sheet-scroll" style={{flex:1,overflow:'auto'}}>
               <table style={{borderCollapse:'collapse',minWidth:'100%',fontSize:12}}>
@@ -1074,7 +1120,7 @@ export default function AdminProjectPage() {
                         <td style={{...td,background:'rgba(39,174,96,.03)'}}>{sel_('blind_type',r.blind_type,products.map(p=>p.name))}</td>
                         <td style={{...td,background:'rgba(39,174,96,.03)'}}>{sel_('control',r.control,motors.map(m=>m.name))}</td>
                         <td style={td}>{txt_('location',r.location)}</td>
-                        {colVisible('fabric') && <td style={{...td,background:'rgba(39,174,96,.03)'}}>{sel_('fabric',r.fabric,fabricOptions)}</td>}
+                        {colVisible('fabric') && <td style={{...td,background:'rgba(39,174,96,.03)'}}>{txt_('fabric',r.fabric)}</td>}
                         {colVisible('valance') && <td style={{...td,background:'rgba(39,174,96,.03)'}}>{sel_('valance',r.valance,VALANCES)}</td>}
                         {colVisible('bottom_rail') && <td style={{...td,background:'rgba(39,174,96,.03)'}}>{sel_('bottom_rail',r.bottom_rail,BRAILS)}</td>}
                         {colVisible('mount') && <td style={{...td,background:'rgba(39,174,96,.03)'}}>{sel_('mount',r.mount,MOUNTS)}</td>}
@@ -1109,14 +1155,20 @@ export default function AdminProjectPage() {
                   </tr>
                 </tfoot>
               </table>
+              <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:20,padding:'16px 20px',background:'#FFFBF0',borderTop:'3px solid #E8C96B',flexWrap:'wrap'}}>
+                <span style={{fontSize:13,color:'#4A5568'}}>Blinds <strong style={{color:'#1C1C1E',fontWeight:700}}>{fmt(totB*(1-config.discount_pct/100))}</strong></span>
+                <span style={{fontSize:13,color:'#4A5568'}}>Motors <strong style={{color:'#1C1C1E',fontWeight:700}}>{fmt(totM*(1-config.discount_pct/100))}</strong></span>
+                {config.discount_pct>0 && <span style={{fontSize:13,color:'#27AE60',fontWeight:600}}>Discount ({config.discount_pct}%) <strong>-{fmt((totB+totM)*config.discount_pct/100)}</strong></span>}
+                <span style={{fontSize:13,color:'#4A5568'}}>Tax <strong style={{color:'#1C1C1E',fontWeight:700}}>{fmt(tax)}</strong></span>
+                <span style={{fontSize:13,color:'#4A5568'}}>Shipping <strong style={{color:'#1C1C1E',fontWeight:700}}>{fmt(ship)}</strong></span>
+                <span style={{fontSize:13,color:'#4A5568'}}>Installation <strong style={{color:'#1C1C1E',fontWeight:700}}>{fmt(config.installation)}</strong></span>
+                <span style={{width:2,height:24,background:'#E8C96B'}}/>
+                <span style={{fontSize:19,color:'#B8860B',fontWeight:800}}>Project Total: {fmt(grand)}</span>
+              </div>
             </div>
-            <div style={{height:26,background:'#1C1C1E',display:'flex',alignItems:'center',padding:'0 14px',gap:16}}>
+            <div style={{height:26,background:'#1C1C1E',display:'flex',alignItems:'center',padding:'0 14px',gap:16,flexShrink:0}}>
               <span style={{fontSize:10,color:'#9AA5B4'}}>Rows: <span style={{color:'#C9A84C',fontWeight:600}}>{dataRows.length}</span></span>
               <span style={{fontSize:10,color:'#9AA5B4'}}>Press Enter in Remarks to add a new row</span>
-              <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:8}}>
-                <span style={{color:'rgba(255,255,255,.3)',fontSize:10}}>TOTAL</span>
-                <span style={{color:'#C9A84C',fontSize:14,fontWeight:700}}>{fmt(grand)}</span>
-              </div>
             </div>
           </>}
 
@@ -1215,70 +1267,6 @@ export default function AdminProjectPage() {
                       <input type="number" placeholder="Factor" value={newMotorFactor} onChange={e=>setNewMotorFactor(parseFloat(e.target.value)||0)} style={{width:80,padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/>
                       <button onClick={addMotor} style={{background:'#7C3AED',color:'#fff',border:'none',padding:'7px 14px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer'}}>＋ Add</button>
                     </div>
-                  </div>
-                </div>
-
-                {/* FABRICS */}
-                <div style={{background:'#fff',borderRadius:10,border:'1px solid #E2DDD6',marginBottom:16,overflow:'hidden'}}>
-                  <div style={{padding:'12px 16px',borderBottom:'1px solid #E2DDD6',fontWeight:700,fontSize:13}}>Fabrics <span style={{background:'#FEF3C7',color:'#92400E',fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:700,marginLeft:6}}>Linked to "Fabric" column — drives cost, blind type still sets the factor</span></div>
-                  <div style={{padding:'14px 16px'}}>
-                    <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
-                      <input placeholder="🔍 Search by code, series, or vendor..." value={fabricSearch} onChange={e=>setFabricSearch(e.target.value)} style={{flex:1,minWidth:200,padding:'7px 10px',border:'1px solid #E2DDD6',borderRadius:6,fontSize:12}}/>
-                      <select value={selectedFabricId} onChange={e=>selectFabricToEdit(e.target.value)} style={{minWidth:200,padding:'7px 10px',border:'1px solid #E2DDD6',borderRadius:6,fontSize:12}}>
-                        <option value="">— Select a fabric to view/edit —</option>
-                        {filteredFabrics.map(f=>(
-                          <option key={f.id} value={f.id}>{f.code} (series {f.series}) — ${f.cost_cordless}/${f.cost_beadchain}</option>
-                        ))}
-                      </select>
-                      <button onClick={()=>setShowAddFabric(v=>!v)} style={{background:'#F59E0B',color:'#fff',border:'none',padding:'7px 14px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer'}}>＋ Add Fabric</button>
-                    </div>
-                    <div style={{fontSize:11,color:'#9AA5B4',marginBottom:showAddFabric||fabricEditForm?12:0}}>{filteredFabrics.length} of {fabrics.length} fabrics{fabricSearch?' matching "'+fabricSearch+'"':''}</div>
-
-                    {showAddFabric && (
-                      <div style={{border:'1px dashed #F59E0B',borderRadius:8,padding:12,marginBottom:12,background:'#FFFBEB'}}>
-                        <div style={{fontSize:11,fontWeight:700,color:'#92400E',marginBottom:8}}>New Fabric</div>
-                        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))',gap:8,marginBottom:8}}>
-                          <input placeholder="Code (e.g. 83046A)" value={newFabricForm.code} onChange={e=>setNewFabricForm(p=>({...p,code:e.target.value}))} style={{padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/>
-                          <input placeholder="Series (e.g. 83046)" value={newFabricForm.series} onChange={e=>setNewFabricForm(p=>({...p,series:e.target.value}))} style={{padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/>
-                          <input placeholder="Vendor" value={newFabricForm.vendor} onChange={e=>setNewFabricForm(p=>({...p,vendor:e.target.value}))} style={{padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/>
-                          <select value={newFabricForm.category} onChange={e=>setNewFabricForm(p=>({...p,category:e.target.value}))} style={{padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}>
-                            <option value="zebra">Zebra</option>
-                            <option value="dream_curtain">Dream Curtain</option>
-                            <option value="other">Other</option>
-                          </select>
-                          <input type="number" placeholder="Cordless cost" value={newFabricForm.cost_cordless||''} onChange={e=>setNewFabricForm(p=>({...p,cost_cordless:parseFloat(e.target.value)||0}))} style={{padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/>
-                          <input type="number" placeholder="Bead chain cost" value={newFabricForm.cost_beadchain||''} onChange={e=>setNewFabricForm(p=>({...p,cost_beadchain:parseFloat(e.target.value)||0}))} style={{padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/>
-                        </div>
-                        <button disabled={fabricBusy} onClick={addFabric} style={{background:'#F59E0B',color:'#fff',border:'none',padding:'7px 16px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer'}}>{fabricBusy?'Adding…':'Add Fabric'}</button>
-                      </div>
-                    )}
-
-                    {fabricEditForm && (
-                      <div style={{border:'1px solid #E2DDD6',borderRadius:8,padding:12,background:'#FAFAFA'}}>
-                        <div style={{fontSize:11,fontWeight:700,color:'#4A5568',marginBottom:8}}>Editing {fabricEditForm.code}</div>
-                        <div style={{fontSize:10,color:'#9AA5B4',marginBottom:10}}>
-                          Catalog photo: <a href={`/catalog/${fabricEditForm.category}/${(fabricEditForm.vendor||'unsorted').toLowerCase()}/series-${fabricEditForm.series}.jpg`} target="_blank" rel="noreferrer" style={{color:'#8B6914'}}>
-                            /catalog/{fabricEditForm.category}/{(fabricEditForm.vendor||'unsorted').toLowerCase()}/series-{fabricEditForm.series}.jpg
-                          </a> {fabricEditForm.vendor && <span>· vendor: <strong>{fabricEditForm.vendor}</strong></span>}
-                        </div>
-                        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))',gap:8,marginBottom:10}}>
-                          <div><label style={{fontSize:9,color:'#9AA5B4',display:'block'}}>Code</label><input value={fabricEditForm.code} onChange={e=>setFabricEditForm(p=>p?{...p,code:e.target.value}:p)} style={{width:'100%',padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/></div>
-                          <div><label style={{fontSize:9,color:'#9AA5B4',display:'block'}}>Series</label><input value={fabricEditForm.series} onChange={e=>setFabricEditForm(p=>p?{...p,series:e.target.value}:p)} style={{width:'100%',padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/></div>
-                          <div><label style={{fontSize:9,color:'#9AA5B4',display:'block'}}>Vendor</label><input value={fabricEditForm.vendor} onChange={e=>setFabricEditForm(p=>p?{...p,vendor:e.target.value}:p)} style={{width:'100%',padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/></div>
-                          <div><label style={{fontSize:9,color:'#9AA5B4',display:'block'}}>Category</label>
-                            <select value={fabricEditForm.category} onChange={e=>setFabricEditForm(p=>p?{...p,category:e.target.value}:p)} style={{width:'100%',padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}>
-                              <option value="zebra">Zebra</option><option value="dream_curtain">Dream Curtain</option><option value="other">Other</option>
-                            </select>
-                          </div>
-                          <div><label style={{fontSize:9,color:'#9AA5B4',display:'block'}}>Cordless cost/m²</label><input type="number" value={fabricEditForm.cost_cordless} onChange={e=>setFabricEditForm(p=>p?{...p,cost_cordless:parseFloat(e.target.value)||0}:p)} style={{width:'100%',padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/></div>
-                          <div><label style={{fontSize:9,color:'#9AA5B4',display:'block'}}>Bead chain cost/m²</label><input type="number" value={fabricEditForm.cost_beadchain} onChange={e=>setFabricEditForm(p=>p?{...p,cost_beadchain:parseFloat(e.target.value)||0}:p)} style={{width:'100%',padding:'6px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/></div>
-                        </div>
-                        <div style={{display:'flex',gap:8}}>
-                          <button disabled={fabricBusy} onClick={saveFabricEdit} style={{background:'#27AE60',color:'#fff',border:'none',padding:'7px 16px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer'}}>{fabricBusy?'Saving…':'Save Changes'}</button>
-                          <button disabled={fabricBusy} onClick={deactivateFabric} style={{background:'#fff',color:'#E53E3E',border:'1px solid #FECACA',padding:'7px 16px',borderRadius:6,fontSize:12,cursor:'pointer'}}>Mark Unavailable</button>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
 
@@ -1531,6 +1519,19 @@ export default function AdminProjectPage() {
                             </button>
                           )}
                           <button onClick={()=>toggleInvExpand(inv.id)} style={{border:'1px solid #E2DDD6',background:'#fff',padding:'6px 12px',borderRadius:6,fontSize:11,cursor:'pointer'}}>{isExp?'Hide':'👁 View / Send'}</button>
+                          {inv.status!=='paid' && inv.status!=='void' && (
+                            paymentLinks[inv.id] ? (
+                              <button onClick={()=>copyPaymentLink(inv.id)} title={paymentLinks[inv.id]}
+                                style={{border:'1px solid #86EFAC',background:linkCopied===inv.id?'#D1FAE5':'#F0FDF4',color:'#166534',padding:'6px 10px',borderRadius:6,fontSize:11,cursor:'pointer'}}>
+                                {linkCopied===inv.id?'✓ Copied':'🔗 Copy Link'}
+                              </button>
+                            ) : (
+                              <button disabled={linkBusy===inv.id} onClick={()=>getPaymentLink(inv)}
+                                style={{border:'1px solid #93C5FD',background:'#EFF6FF',color:'#1E40AF',padding:'6px 10px',borderRadius:6,fontSize:11,cursor:'pointer'}}>
+                                {linkBusy===inv.id?'Generating…':'🔗 Get Payment Link'}
+                              </button>
+                            )
+                          )}
                           {inv.status!=='paid' && (
                             <button disabled={invBusy} onClick={()=>voidInvoice(inv.id, inv.status==='void')} title={inv.status==='void'?'Restore this invoice':'Void — keeps the record but removes it from balance owed'}
                               style={{border:'1px solid #E2DDD6',background:'#fff',color:'#92400E',padding:'6px 10px',borderRadius:6,fontSize:11,cursor:'pointer'}}>
@@ -1788,6 +1789,118 @@ export default function AdminProjectPage() {
               </div>
             </div>
           )}
+
+          {tab==='vendor' && (() => {
+            const vendors = Array.from(new Set(vendorCatalog.map(v=>v.vendor)))
+            const categoriesForVendor = (vendor:string) => {
+              const cats = vendorCatalog.filter(v=>v.vendor===vendor)
+              const seen = new Set<string>()
+              const list: {key:string,category:string,subcategory:string|null}[] = []
+              cats.forEach(c=>{
+                const key = c.product_category+'|'+(c.subcategory||'')
+                if (!seen.has(key)) { seen.add(key); list.push({key,category:c.product_category,subcategory:c.subcategory}) }
+              })
+              return list
+            }
+            const rowsForSelection = vendorCatalog.filter(v=>{
+              if (!selectedVendor || !selectedVendorCat) return false
+              return v.vendor===selectedVendor && (v.product_category+'|'+(v.subcategory||''))===selectedVendorCat
+            })
+            const startEditVendorRow = (row:any) => { setEditingVendorRow(row.id); setVendorEditForm({...row}) }
+            const saveVendorRow = async () => {
+              if (!editingVendorRow || !vendorEditForm) return
+              try {
+                const res = await fetch(`/api/vendor-catalog/${editingVendorRow}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(vendorEditForm) })
+                const data = await res.json()
+                if (!res.ok) { showToast(data.error||'Could not save','err'); return }
+                setVendorCatalog(prev=>prev.map(v=>v.id===editingVendorRow?data:v))
+                setEditingVendorRow(null); setVendorEditForm(null)
+                showToast('Pricing updated','ok')
+              } catch (err:any) { showToast('Network error: '+err.message,'err') }
+            }
+            const priceCell = (v:number|null|undefined) => v==null ? <span style={{color:'#FCA5A5'}}>—</span> : fmt(v)
+            return (
+              <div style={{flex:1,display:'flex',overflow:'hidden'}}>
+                <div style={{width:220,borderRight:'1px solid #E2DDD6',overflowY:'auto',background:'#FAFAFA',flexShrink:0}}>
+                  <div style={{padding:'12px 14px 6px',fontSize:10,fontWeight:700,color:'#9AA5B4',textTransform:'uppercase',letterSpacing:'.5px'}}>Vendors</div>
+                  {vendors.map(vendor=>(
+                    <div key={vendor}>
+                      <div onClick={()=>{setSelectedVendor(v=>v===vendor?null:vendor); setSelectedVendorCat(null)}}
+                        style={{padding:'9px 14px',cursor:'pointer',fontSize:13,fontWeight:600,background:selectedVendor===vendor?'#FFFBF0':'transparent',borderLeft:selectedVendor===vendor?'3px solid #B8860B':'3px solid transparent',display:'flex',alignItems:'center',gap:6}}>
+                        <span style={{fontSize:10,transform:selectedVendor===vendor?'rotate(90deg)':'none',display:'inline-block',color:'#9AA5B4'}}>▶</span>
+                        🏭 {vendor}
+                      </div>
+                      {selectedVendor===vendor && categoriesForVendor(vendor).map(c=>(
+                        <div key={c.key} onClick={()=>setSelectedVendorCat(c.key)}
+                          style={{padding:'7px 14px 7px 32px',cursor:'pointer',fontSize:12,color:selectedVendorCat===c.key?'#B8860B':'#4A5568',fontWeight:selectedVendorCat===c.key?700:400,background:selectedVendorCat===c.key?'#FFF6DC':'transparent'}}>
+                          {c.category}{c.subcategory?` — ${c.subcategory}`:''}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  {!vendors.length && <div style={{padding:14,fontSize:12,color:'#9AA5B4'}}>No vendor pricing loaded yet.</div>}
+                </div>
+                <div style={{flex:1,overflow:'auto',padding:18}}>
+                  {!selectedVendorCat ? (
+                    <div style={{textAlign:'center',padding:60,color:'#9AA5B4',fontSize:13}}>Select a vendor, then a product category on the left to see fabric codes and pricing.</div>
+                  ) : (
+                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                      <thead><tr style={{borderBottom:'2px solid #E2DDD6',textAlign:'left'}}>
+                        <th style={{padding:'0 8px 8px 0'}}>Series</th>
+                        <th style={{padding:'0 8px 8px'}}>Fabric Codes</th>
+                        <th style={{padding:'0 8px 8px'}}>Type</th>
+                        <th style={{padding:'0 8px 8px',textAlign:'right'}}>Cord</th>
+                        <th style={{padding:'0 8px 8px',textAlign:'right'}}>Cord TDBU</th>
+                        <th style={{padding:'0 8px 8px',textAlign:'right'}}>Cord D&N</th>
+                        <th style={{padding:'0 8px 8px',textAlign:'right'}}>Lock/Chain</th>
+                        <th style={{padding:'0 8px 8px',textAlign:'right'}}>Lock TDBU</th>
+                        <th style={{padding:'0 8px 8px',textAlign:'right'}}>Lock D&N</th>
+                        <th style={{padding:'0 8px 8px'}}></th>
+                      </tr></thead>
+                      <tbody>
+                        {rowsForSelection.map(row=>(
+                          <tr key={row.id} style={{borderBottom:'1px solid #F0EDE8'}}>
+                            {editingVendorRow===row.id ? (
+                              <>
+                                <td style={{padding:'6px 8px 6px 0'}}>{row.series}</td>
+                                <td style={{padding:'6px 8px'}}><input value={vendorEditForm.fabric_codes} onChange={e=>setVendorEditForm((p:any)=>({...p,fabric_codes:e.target.value}))} style={{width:180,padding:'3px 5px',border:'1px solid #E2DDD6',borderRadius:4,fontSize:11}}/></td>
+                                <td style={{padding:'6px 8px'}}><input value={vendorEditForm.description||''} onChange={e=>setVendorEditForm((p:any)=>({...p,description:e.target.value}))} style={{width:90,padding:'3px 5px',border:'1px solid #E2DDD6',borderRadius:4,fontSize:11}}/></td>
+                                {(['price_cordless','price_cordless_tdbu','price_cordless_daynight','price_beadchain','price_lock_tdbu','price_lock_daynight'] as const).map(f=>(
+                                  <td key={f} style={{padding:'6px 8px',textAlign:'right'}}><input type="number" value={vendorEditForm[f]??''} onChange={e=>setVendorEditForm((p:any)=>({...p,[f]:e.target.value}))} style={{width:64,padding:'3px 5px',border:'1px solid #E2DDD6',borderRadius:4,fontSize:11,textAlign:'right'}}/></td>
+                                ))}
+                                <td style={{padding:'6px 8px',whiteSpace:'nowrap'}}>
+                                  <button onClick={saveVendorRow} style={{fontSize:10,background:'#27AE60',color:'#fff',border:'none',padding:'4px 8px',borderRadius:4,cursor:'pointer',marginRight:4}}>Save</button>
+                                  <button onClick={()=>{setEditingVendorRow(null);setVendorEditForm(null)}} style={{fontSize:10,background:'#fff',border:'1px solid #E2DDD6',padding:'4px 8px',borderRadius:4,cursor:'pointer'}}>Cancel</button>
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td style={{padding:'8px 8px 8px 0',fontWeight:600}}>{row.series}</td>
+                                <td style={{padding:'8px',color:'#4A5568',maxWidth:260}}>{row.fabric_codes}</td>
+                                <td style={{padding:'8px',color:'#9AA5B4'}}>{row.description||'—'}</td>
+                                <td style={{padding:'8px',textAlign:'right'}}>{priceCell(row.price_cordless)}</td>
+                                <td style={{padding:'8px',textAlign:'right'}}>{priceCell(row.price_cordless_tdbu)}</td>
+                                <td style={{padding:'8px',textAlign:'right'}}>{priceCell(row.price_cordless_daynight)}</td>
+                                <td style={{padding:'8px',textAlign:'right'}}>{priceCell(row.price_beadchain)}</td>
+                                <td style={{padding:'8px',textAlign:'right'}}>{priceCell(row.price_lock_tdbu)}</td>
+                                <td style={{padding:'8px',textAlign:'right'}}>{priceCell(row.price_lock_daynight)}</td>
+                                <td style={{padding:'8px'}}><button onClick={()=>startEditVendorRow(row)} style={{fontSize:10,background:'#fff',border:'1px solid #E2DDD6',padding:'4px 8px',borderRadius:4,cursor:'pointer'}}>Edit</button></td>
+                              </>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  {selectedVendorCat && rowsForSelection.some(r=>r.notes) && (
+                    <div style={{marginTop:14,background:'#FEF3C7',border:'1px solid rgba(245,158,11,.3)',borderRadius:7,padding:'10px 14px',fontSize:11,color:'#92400E'}}>
+                      {rowsForSelection.filter(r=>r.notes).map(r=><div key={r.id}>⚠ {r.series}: {r.notes}</div>)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
         </div>
       </div>
 
@@ -1807,6 +1920,30 @@ export default function AdminProjectPage() {
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
               <button onClick={()=>setShowNewCustomer(false)} style={{background:'#F7F4EF',border:'1px solid #E2DDD6',color:'#4A5568',padding:'8px 16px',borderRadius:6,fontSize:12,cursor:'pointer'}}>Cancel</button>
               <button disabled={newCustBusy} onClick={createCustomer} style={{background:'#C9A84C',color:'#1C1C1E',border:'none',padding:'8px 16px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer'}}>{newCustBusy?'Creating…':'Create Customer'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEditProject && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:998}} onClick={()=>setShowEditProject(false)}>
+          <div style={{background:'#fff',borderRadius:12,padding:24,width:400,maxWidth:'90vw',boxShadow:'0 24px 64px rgba(0,0,0,.25)'}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontFamily:'Playfair Display,serif',fontSize:17,marginBottom:16}}>Edit Project Info</div>
+            <label style={{display:'block',fontSize:11,fontWeight:700,color:'#4A5568',marginBottom:4}}>Project Name *</label>
+            <input value={editProjectForm.name} onChange={e=>setEditProjectForm(p=>({...p,name:e.target.value}))} autoFocus
+              style={{width:'100%',padding:'8px 10px',border:'1px solid #E2DDD6',borderRadius:6,fontSize:13,marginBottom:12,boxSizing:'border-box'}}/>
+            <label style={{display:'block',fontSize:11,fontWeight:700,color:'#4A5568',marginBottom:4}}>Email</label>
+            <input value={editProjectForm.email} onChange={e=>setEditProjectForm(p=>({...p,email:e.target.value}))} type="email"
+              style={{width:'100%',padding:'8px 10px',border:'1px solid #E2DDD6',borderRadius:6,fontSize:13,marginBottom:12,boxSizing:'border-box'}}/>
+            <label style={{display:'block',fontSize:11,fontWeight:700,color:'#4A5568',marginBottom:4}}>Phone</label>
+            <input value={editProjectForm.phone} onChange={e=>setEditProjectForm(p=>({...p,phone:e.target.value}))}
+              style={{width:'100%',padding:'8px 10px',border:'1px solid #E2DDD6',borderRadius:6,fontSize:13,marginBottom:12,boxSizing:'border-box'}}/>
+            <label style={{display:'block',fontSize:11,fontWeight:700,color:'#4A5568',marginBottom:4}}>Address</label>
+            <input value={editProjectForm.address} onChange={e=>setEditProjectForm(p=>({...p,address:e.target.value}))}
+              style={{width:'100%',padding:'8px 10px',border:'1px solid #E2DDD6',borderRadius:6,fontSize:13,marginBottom:18,boxSizing:'border-box'}}/>
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+              <button onClick={()=>setShowEditProject(false)} style={{background:'#F7F4EF',border:'1px solid #E2DDD6',color:'#4A5568',padding:'8px 16px',borderRadius:6,fontSize:12,cursor:'pointer'}}>Cancel</button>
+              <button disabled={savingProjectInfo} onClick={saveProjectInfo} style={{background:'#C9A84C',color:'#1C1C1E',border:'none',padding:'8px 16px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer'}}>{savingProjectInfo?'Saving…':'Save Changes'}</button>
             </div>
           </div>
         </div>
