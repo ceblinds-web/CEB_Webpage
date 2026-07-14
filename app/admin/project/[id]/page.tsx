@@ -767,8 +767,27 @@ export default function AdminProjectPage() {
       if (!wb.SheetNames.length) { setImportStatus({msg:'No sheets found', type:'error'}); return }
       const sheetName = wb.SheetNames.includes('Sheet1') ? 'Sheet1' : wb.SheetNames[0]
       const ws = wb.Sheets[sheetName]
-      const json: any[] = XLSX.utils.sheet_to_json(ws, { defval:'', raw:false })
-      if (!json.length) { setImportStatus({msg:`Sheet "${sheetName}" is empty`, type:'error'}); return }
+
+      // Detect whether row 1 is a real header (column names like "Blind Type",
+      // "Width") or already actual data — some exports (like CEB's original
+      // spreadsheet format) start straight into data with no header row at
+      // all, which silently broke every column match except Location before.
+      const rawRows: any[][] = XLSX.utils.sheet_to_json(ws, { header:1, defval:'', raw:false })
+      const firstRow = rawRows[0]||[]
+      // Primary signal: a real header's first cell is never a bare number —
+      // it's a serial-number DATA row if it is (this catches the case a
+      // pure keyword search can't: a location value like
+      // "B2_Window_Next_to_main_Door" contains "window" as a substring and
+      // would otherwise falsely look like a header).
+      const firstCellIsNumber = String(firstRow[0]||'').trim() !== '' && !isNaN(Number(firstRow[0]))
+      const HEADER_WORDS = ['blind','width','height','location','control','fabric','qty','quantity','remark','mount','valance','rail','description','item','room','window']
+      // Secondary signal: only short label-like cells count as a keyword
+      // match — a long compound location string shouldn't count just
+      // because it happens to contain a header word as a substring.
+      const looksLikeHeader = !firstCellIsNumber && firstRow.some(cell => {
+        const c = String(cell||'').toLowerCase().trim()
+        return c.length > 0 && c.length <= 20 && HEADER_WORDS.some(w => c.includes(w))
+      })
 
       const match = (row:any, candidates:string[]) => {
         for (const key of Object.keys(row)) {
@@ -780,6 +799,22 @@ export default function AdminProjectPage() {
         }
         return ''
       }
+
+      // Fixed column order for headerless sheets: Sr#, Blind Type, Control,
+      // Location, Fabric, Valance, Bottom Rail, Mount, Width, Height, Qty, Remarks
+      const POSITIONAL_COLS = ['_sr','blind type','control','location','fabric','valance','bottom rail','mount','width','height','qty','remark']
+      const toNamedRow = (arr:any[]): any => {
+        const obj: any = {}
+        POSITIONAL_COLS.forEach((name,i)=>{ obj[name] = arr[i] ?? '' })
+        return obj
+      }
+
+      const json: any[] = looksLikeHeader
+        ? XLSX.utils.sheet_to_json(ws, { defval:'', raw:false })
+        : rawRows.filter(r => r.some(c => String(c||'').trim() !== '')).map(toNamedRow)
+
+      if (!json.length) { setImportStatus({msg:`Sheet "${sheetName}" is empty`, type:'error'}); return }
+      setImportStatus({ msg: looksLikeHeader ? `Reading "${file.name}" (header row detected)…` : `Reading "${file.name}" (no header row — using standard column order)…`, type:'info' })
 
       const newRows: Row[] = []
       let added = 0, skipped = 0
@@ -1024,6 +1059,16 @@ export default function AdminProjectPage() {
               <span style={{width:1,height:20,background:'#E2DDD6',margin:'0 4px'}}/>
               <button onClick={doPush} disabled={pushing} style={{display:'flex',alignItems:'center',gap:3,padding:'5px 9px',border:'none',background:'#27AE60',color:'#fff',borderRadius:5,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>{pushing?'Pushing…':'⬆ Push to Customer'}</button>
               <span style={{marginLeft:'auto',fontSize:11,color:'#8B6914',background:'#F7F4EF',border:'1px solid #E2DDD6',borderRadius:4,padding:'3px 10px',whiteSpace:'nowrap'}}>Total: <strong>{fmt(grand)}</strong></span>
+            </div>
+            <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:14,padding:'8px 14px',background:'#fff',borderBottom:'1px solid #E2DDD6',flexShrink:0,flexWrap:'wrap'}}>
+              <span style={{fontSize:10,color:'#9AA5B4'}}>Blinds <strong style={{color:'#1C1C1E',fontWeight:600}}>{fmt(totB*(1-config.discount_pct/100))}</strong></span>
+              <span style={{fontSize:10,color:'#9AA5B4'}}>Motors <strong style={{color:'#1C1C1E',fontWeight:600}}>{fmt(totM*(1-config.discount_pct/100))}</strong></span>
+              {config.discount_pct>0 && <span style={{fontSize:10,color:'#27AE60'}}>Discount ({config.discount_pct}%) <strong>-{fmt((totB+totM)*config.discount_pct/100)}</strong></span>}
+              <span style={{fontSize:10,color:'#9AA5B4'}}>Tax <strong style={{color:'#1C1C1E',fontWeight:600}}>{fmt(tax)}</strong></span>
+              <span style={{fontSize:10,color:'#9AA5B4'}}>Shipping <strong style={{color:'#1C1C1E',fontWeight:600}}>{fmt(ship)}</strong></span>
+              <span style={{fontSize:10,color:'#9AA5B4'}}>Installation <strong style={{color:'#1C1C1E',fontWeight:600}}>{fmt(config.installation)}</strong></span>
+              <span style={{width:1,height:16,background:'#E2DDD6'}}/>
+              <span style={{fontSize:13,color:'#8B6914',fontWeight:700}}>Project Total: {fmt(grand)}</span>
             </div>
             <div className="sheet-scroll" style={{flex:1,overflow:'auto'}}>
               <table style={{borderCollapse:'collapse',minWidth:'100%',fontSize:12}}>
