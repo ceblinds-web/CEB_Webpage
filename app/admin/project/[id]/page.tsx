@@ -39,9 +39,6 @@ export default function AdminProjectPage() {
   const lastCellRef = useRef<HTMLInputElement | HTMLSelectElement | null>(null)
 
   const [project, setProject] = useState<any>(null)
-  const [showEditProject, setShowEditProject] = useState(false)
-  const [editProjectForm, setEditProjectForm] = useState({name:'',email:'',phone:'',address:''})
-  const [savingProjectInfo, setSavingProjectInfo] = useState(false)
   const [rows, setRows] = useState<Row[]>([])
   const [config, setConfig] = useState<Config>({ tax_pct:10, shipping_pct:18, discount_pct:0, discount_reason:'', installation:500 })
   const [products, setProducts] = useState<Product[]>([])
@@ -264,26 +261,6 @@ export default function AdminProjectPage() {
 
   // ── PUSH STATE ───────────────────────────────────────────
   const markDirty = () => setIsPushed(false)
-  const openEditProject = () => {
-    setEditProjectForm({ name: project?.name||'', email: project?.email||'', phone: project?.phone||'', address: project?.address||'' })
-    setShowEditProject(true)
-  }
-  const saveProjectInfo = async () => {
-    if (!editProjectForm.name.trim()) return showToast('Project name is required','err')
-    setSavingProjectInfo(true)
-    try {
-      const res = await fetch(`/api/projects/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(editProjectForm) })
-      const text = await res.text()
-      let data: any = {}
-      try { data = text ? JSON.parse(text) : {} } catch { showToast('Server returned an unexpected response','err'); return }
-      if (!res.ok) { showToast(data.error||'Could not save project info','err'); return }
-      setProject((p:any)=>({...p, ...editProjectForm}))
-      setShowEditProject(false)
-      showToast('Project info updated','ok')
-    } catch (err:any) {
-      showToast('Network error: '+err.message,'err')
-    } finally { setSavingProjectInfo(false) }
-  }
 
   // ── PRODUCTS / MOTORS MANAGEMENT ─────────────────────────
   const updProduct = async (pid: string, field: string, val: number) => {
@@ -767,27 +744,8 @@ export default function AdminProjectPage() {
       if (!wb.SheetNames.length) { setImportStatus({msg:'No sheets found', type:'error'}); return }
       const sheetName = wb.SheetNames.includes('Sheet1') ? 'Sheet1' : wb.SheetNames[0]
       const ws = wb.Sheets[sheetName]
-
-      // Detect whether row 1 is a real header (column names like "Blind Type",
-      // "Width") or already actual data — some exports (like CEB's original
-      // spreadsheet format) start straight into data with no header row at
-      // all, which silently broke every column match except Location before.
-      const rawRows: any[][] = XLSX.utils.sheet_to_json(ws, { header:1, defval:'', raw:false })
-      const firstRow = rawRows[0]||[]
-      // Primary signal: a real header's first cell is never a bare number —
-      // it's a serial-number DATA row if it is (this catches the case a
-      // pure keyword search can't: a location value like
-      // "B2_Window_Next_to_main_Door" contains "window" as a substring and
-      // would otherwise falsely look like a header).
-      const firstCellIsNumber = String(firstRow[0]||'').trim() !== '' && !isNaN(Number(firstRow[0]))
-      const HEADER_WORDS = ['blind','width','height','location','control','fabric','qty','quantity','remark','mount','valance','rail','description','item','room','window']
-      // Secondary signal: only short label-like cells count as a keyword
-      // match — a long compound location string shouldn't count just
-      // because it happens to contain a header word as a substring.
-      const looksLikeHeader = !firstCellIsNumber && firstRow.some(cell => {
-        const c = String(cell||'').toLowerCase().trim()
-        return c.length > 0 && c.length <= 20 && HEADER_WORDS.some(w => c.includes(w))
-      })
+      const json: any[] = XLSX.utils.sheet_to_json(ws, { defval:'', raw:false })
+      if (!json.length) { setImportStatus({msg:`Sheet "${sheetName}" is empty`, type:'error'}); return }
 
       const match = (row:any, candidates:string[]) => {
         for (const key of Object.keys(row)) {
@@ -799,22 +757,6 @@ export default function AdminProjectPage() {
         }
         return ''
       }
-
-      // Fixed column order for headerless sheets: Sr#, Blind Type, Control,
-      // Location, Fabric, Valance, Bottom Rail, Mount, Width, Height, Qty, Remarks
-      const POSITIONAL_COLS = ['_sr','blind type','control','location','fabric','valance','bottom rail','mount','width','height','qty','remark']
-      const toNamedRow = (arr:any[]): any => {
-        const obj: any = {}
-        POSITIONAL_COLS.forEach((name,i)=>{ obj[name] = arr[i] ?? '' })
-        return obj
-      }
-
-      const json: any[] = looksLikeHeader
-        ? XLSX.utils.sheet_to_json(ws, { defval:'', raw:false })
-        : rawRows.filter(r => r.some(c => String(c||'').trim() !== '')).map(toNamedRow)
-
-      if (!json.length) { setImportStatus({msg:`Sheet "${sheetName}" is empty`, type:'error'}); return }
-      setImportStatus({ msg: looksLikeHeader ? `Reading "${file.name}" (header row detected)…` : `Reading "${file.name}" (no header row — using standard column order)…`, type:'info' })
 
       const newRows: Row[] = []
       let added = 0, skipped = 0
@@ -889,8 +831,6 @@ export default function AdminProjectPage() {
           <button style={{border:'none',padding:'5px 12px',borderRadius:6,fontSize:12,fontFamily:'Inter,sans-serif',fontWeight:600,cursor:'pointer',background:'rgba(255,255,255,.1)',color:'#fff'}} onClick={()=>router.push('/admin/home')}>← Project Home</button>
           <span style={{color:'#fff',fontFamily:'Playfair Display,serif',fontSize:15}}>{project.name}</span>
           <span style={{color:'#9AA5B4',fontSize:11}}>{project.customers?.name} · {project.address||project.email}</span>
-          <button onClick={openEditProject} title="Edit project name, phone, email, address"
-            style={{border:'1px solid rgba(255,255,255,.15)',background:'rgba(255,255,255,.06)',color:'#C9A84C',padding:'4px 9px',borderRadius:5,fontSize:11,cursor:'pointer'}}>✎ Edit</button>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           {project.confirmed_at ? (
@@ -1060,10 +1000,6 @@ export default function AdminProjectPage() {
               <button onClick={doPush} disabled={pushing} style={{display:'flex',alignItems:'center',gap:3,padding:'5px 9px',border:'none',background:'#27AE60',color:'#fff',borderRadius:5,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>{pushing?'Pushing…':'⬆ Push to Customer'}</button>
               <span style={{marginLeft:'auto',fontSize:11,color:'#8B6914',background:'#F7F4EF',border:'1px solid #E2DDD6',borderRadius:4,padding:'3px 10px',whiteSpace:'nowrap'}}>Total: <strong>{fmt(grand)}</strong></span>
             </div>
-            <div style={{display:'flex',justifyContent:'flex-end',alignItems:'baseline',gap:10,padding:'10px 16px 4px',background:'#fff',flexShrink:0,flexWrap:'wrap'}}>
-              <span style={{fontFamily:"'Brush Script MT','Segoe Script',cursive",fontSize:22,color:'#C0392B',lineHeight:1}}>{project.name}</span>
-              {project.address && <span style={{fontFamily:"'Brush Script MT','Segoe Script',cursive",fontSize:15,color:'#C0392B',opacity:.8,lineHeight:1}}>{project.address}</span>}
-            </div>
             <div className="sheet-scroll" style={{flex:1,overflow:'auto'}}>
               <table style={{borderCollapse:'collapse',minWidth:'100%',fontSize:12}}>
                 <thead>
@@ -1173,20 +1109,14 @@ export default function AdminProjectPage() {
                   </tr>
                 </tfoot>
               </table>
-              <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:14,padding:'10px 16px',background:'#F7F4EF',borderTop:'2px solid #C9A84C',flexWrap:'wrap'}}>
-                <span style={{fontSize:10,color:'#9AA5B4'}}>Blinds <strong style={{color:'#1C1C1E',fontWeight:600}}>{fmt(totB*(1-config.discount_pct/100))}</strong></span>
-                <span style={{fontSize:10,color:'#9AA5B4'}}>Motors <strong style={{color:'#1C1C1E',fontWeight:600}}>{fmt(totM*(1-config.discount_pct/100))}</strong></span>
-                {config.discount_pct>0 && <span style={{fontSize:10,color:'#27AE60'}}>Discount ({config.discount_pct}%) <strong>-{fmt((totB+totM)*config.discount_pct/100)}</strong></span>}
-                <span style={{fontSize:10,color:'#9AA5B4'}}>Tax <strong style={{color:'#1C1C1E',fontWeight:600}}>{fmt(tax)}</strong></span>
-                <span style={{fontSize:10,color:'#9AA5B4'}}>Shipping <strong style={{color:'#1C1C1E',fontWeight:600}}>{fmt(ship)}</strong></span>
-                <span style={{fontSize:10,color:'#9AA5B4'}}>Installation <strong style={{color:'#1C1C1E',fontWeight:600}}>{fmt(config.installation)}</strong></span>
-                <span style={{width:1,height:16,background:'#E2DDD6'}}/>
-                <span style={{fontSize:13,color:'#8B6914',fontWeight:700}}>Project Total: {fmt(grand)}</span>
-              </div>
             </div>
-            <div style={{height:26,background:'#1C1C1E',display:'flex',alignItems:'center',padding:'0 14px',gap:16,flexShrink:0}}>
+            <div style={{height:26,background:'#1C1C1E',display:'flex',alignItems:'center',padding:'0 14px',gap:16}}>
               <span style={{fontSize:10,color:'#9AA5B4'}}>Rows: <span style={{color:'#C9A84C',fontWeight:600}}>{dataRows.length}</span></span>
               <span style={{fontSize:10,color:'#9AA5B4'}}>Press Enter in Remarks to add a new row</span>
+              <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:8}}>
+                <span style={{color:'rgba(255,255,255,.3)',fontSize:10}}>TOTAL</span>
+                <span style={{color:'#C9A84C',fontSize:14,fontWeight:700}}>{fmt(grand)}</span>
+              </div>
             </div>
           </>}
 
@@ -1877,30 +1807,6 @@ export default function AdminProjectPage() {
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
               <button onClick={()=>setShowNewCustomer(false)} style={{background:'#F7F4EF',border:'1px solid #E2DDD6',color:'#4A5568',padding:'8px 16px',borderRadius:6,fontSize:12,cursor:'pointer'}}>Cancel</button>
               <button disabled={newCustBusy} onClick={createCustomer} style={{background:'#C9A84C',color:'#1C1C1E',border:'none',padding:'8px 16px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer'}}>{newCustBusy?'Creating…':'Create Customer'}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showEditProject && (
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:998}} onClick={()=>setShowEditProject(false)}>
-          <div style={{background:'#fff',borderRadius:12,padding:24,width:400,maxWidth:'90vw',boxShadow:'0 24px 64px rgba(0,0,0,.25)'}} onClick={e=>e.stopPropagation()}>
-            <div style={{fontFamily:'Playfair Display,serif',fontSize:17,marginBottom:16}}>Edit Project Info</div>
-            <label style={{display:'block',fontSize:11,fontWeight:700,color:'#4A5568',marginBottom:4}}>Project Name *</label>
-            <input value={editProjectForm.name} onChange={e=>setEditProjectForm(p=>({...p,name:e.target.value}))} autoFocus
-              style={{width:'100%',padding:'8px 10px',border:'1px solid #E2DDD6',borderRadius:6,fontSize:13,marginBottom:12,boxSizing:'border-box'}}/>
-            <label style={{display:'block',fontSize:11,fontWeight:700,color:'#4A5568',marginBottom:4}}>Email</label>
-            <input value={editProjectForm.email} onChange={e=>setEditProjectForm(p=>({...p,email:e.target.value}))} type="email"
-              style={{width:'100%',padding:'8px 10px',border:'1px solid #E2DDD6',borderRadius:6,fontSize:13,marginBottom:12,boxSizing:'border-box'}}/>
-            <label style={{display:'block',fontSize:11,fontWeight:700,color:'#4A5568',marginBottom:4}}>Phone</label>
-            <input value={editProjectForm.phone} onChange={e=>setEditProjectForm(p=>({...p,phone:e.target.value}))}
-              style={{width:'100%',padding:'8px 10px',border:'1px solid #E2DDD6',borderRadius:6,fontSize:13,marginBottom:12,boxSizing:'border-box'}}/>
-            <label style={{display:'block',fontSize:11,fontWeight:700,color:'#4A5568',marginBottom:4}}>Address</label>
-            <input value={editProjectForm.address} onChange={e=>setEditProjectForm(p=>({...p,address:e.target.value}))}
-              style={{width:'100%',padding:'8px 10px',border:'1px solid #E2DDD6',borderRadius:6,fontSize:13,marginBottom:18,boxSizing:'border-box'}}/>
-            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-              <button onClick={()=>setShowEditProject(false)} style={{background:'#F7F4EF',border:'1px solid #E2DDD6',color:'#4A5568',padding:'8px 16px',borderRadius:6,fontSize:12,cursor:'pointer'}}>Cancel</button>
-              <button disabled={savingProjectInfo} onClick={saveProjectInfo} style={{background:'#C9A84C',color:'#1C1C1E',border:'none',padding:'8px 16px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer'}}>{savingProjectInfo?'Saving…':'Save Changes'}</button>
             </div>
           </div>
         </div>

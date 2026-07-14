@@ -25,8 +25,10 @@ export async function middleware(request: NextRequest) {
   if (path.startsWith('/auth') || path.startsWith('/quote') || path.startsWith('/catalog')) {
     return supabaseResponse
   }
-  // Not logged in → redirect to login
+  // Not logged in → root goes to the public catalog (this IS the landing
+  // page now), everything else still goes to login
   if (!user) {
+    if (path === '/') return NextResponse.redirect(new URL('/catalog', request.url))
     return NextResponse.redirect(new URL('/auth/login', request.url))
   }
   // Admin routes — check role

@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react'
 type Fabric = { code:string; series:string; category:string }
 
 const CATEGORIES = [
-  { key:'zebra', name:'Zebra Blinds', cover:'/catalog/zebra-collection-cover.jpg', ready:true,
+  { key:'zebra', name:'Zebra Blinds', cover:'/catalog/_covers/zebra-collection-cover.jpg', ready:true,
     desc:'Dual-layer sheer/solid fabric bands for adjustable light control.' },
-  { key:'dream_curtain', name:'Dream Curtains', cover:'/catalog/dream-curtain-collection-cover.jpg', ready:false,
+  { key:'dream_curtain', name:'Dream Curtains', cover:'/catalog/_covers/dream-curtain-collection-cover.jpg', ready:false,
     desc:'Soft flowing drapery with motorized or chain control.' },
   { key:'honeycomb', name:'Honey Comb Shades', cover:null, ready:false,
     desc:'Cellular insulating structure — energy efficient, clean lines.' },
@@ -18,8 +18,42 @@ const CATEGORIES = [
 // codes for that series together, exactly as the manufacturer laid it out.
 // More series will be added here as photo-matching continues.
 const CONFIRMED_SERIES: Record<string,{image:string}> = {
-  '83046': { image:'/catalog/series-83046.jpg' },
-  '83059': { image:'/catalog/series-83059.jpg' },
+  '83046': { image:'/catalog/zebra/zstarr/series-83046.jpg' },
+  '83059': { image:'/catalog/zebra/zstarr/series-83059.jpg' },
+  '83066': { image:'/catalog/zebra/zstarr/series-83066.jpg' },
+  '83061': { image:'/catalog/zebra/zstarr/series-83061.jpg' },
+  '83071': { image:'/catalog/zebra/zstarr/series-83071.jpg' },
+  '83062': { image:'/catalog/zebra/zstarr/series-83062.jpg' },
+  '83064': { image:'/catalog/zebra/zstarr/series-83064.jpg' },
+  '83070': { image:'/catalog/zebra/zstarr/series-83070.jpg' },
+  '83042': { image:'/catalog/zebra/zstarr/series-83042.jpg' },
+  '83043': { image:'/catalog/zebra/zstarr/series-83043.jpg' },
+  '83044': { image:'/catalog/zebra/zstarr/series-83044.jpg' },
+  '83045': { image:'/catalog/zebra/zstarr/series-83045.jpg' },
+  '83058': { image:'/catalog/zebra/zstarr/series-83058.jpg' },
+  '83048': { image:'/catalog/zebra/zstarr/series-83048.jpg' },
+  '83049': { image:'/catalog/zebra/zstarr/series-83049.jpg' },
+  '83047': { image:'/catalog/zebra/zstarr/series-83047.jpg' },
+  '83050': { image:'/catalog/zebra/zstarr/series-83050.jpg' },
+  '83054': { image:'/catalog/zebra/zstarr/series-83054.jpg' },
+  '83055': { image:'/catalog/zebra/zstarr/series-83055.jpg' },
+  '83056': { image:'/catalog/zebra/zstarr/series-83056.jpg' },
+  '83065': { image:'/catalog/zebra/zstarr/series-83065.jpg' },
+  '83040': { image:'/catalog/zebra/zstarr/series-83040.jpg' },
+  '83011': { image:'/catalog/zebra/zstarr/series-83011.jpg' },
+  '83013': { image:'/catalog/zebra/zstarr/series-83013.jpg' },
+  '83012': { image:'/catalog/zebra/zstarr/series-83012.jpg' },
+  '83039': { image:'/catalog/zebra/zstarr/series-83039.jpg' },
+  '83014': { image:'/catalog/zebra/zstarr/series-83014.jpg' },
+  '83015': { image:'/catalog/zebra/zstarr/series-83015.jpg' },
+  '83051': { image:'/catalog/zebra/zstarr/series-83051.jpg' },
+  '83060': { image:'/catalog/zebra/zstarr/series-83060.jpg' },
+  '83019': { image:'/catalog/zebra/zstarr/series-83019.jpg' },
+  '83020': { image:'/catalog/zebra/zstarr/series-83020.jpg' },
+  '83003': { image:'/catalog/zebra/zstarr/series-83003.jpg' },
+  '83009': { image:'/catalog/zebra/zstarr/series-83009.jpg' },
+  '83032': { image:'/catalog/zebra/zstarr/series-83032.jpg' },
+  '83038': { image:'/catalog/zebra/zstarr/series-83038.jpg' },
 }
 
 export default function CatalogPage() {
@@ -80,7 +114,7 @@ export default function CatalogPage() {
             {CATEGORIES.find(c=>c.key===activeCategory)?.name} — Fabrics
           </h2>
           <p style={{fontSize:12,color:'#9AA5B4',marginBottom:20}}>
-            We're still photographing our full range — the series below have confirmed photos. Ask your CEB advisor about additional fabric codes and colors not shown yet.
+            Showing {Object.keys(seriesInCategory(activeCategory)).filter(s=>CONFIRMED_SERIES[s]).length} of our fabric series with confirmed photos. A few remaining ones are still being photographed — ask your CEB advisor about any code not shown here yet.
           </p>
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))',gap:16}}>
             {Object.entries(seriesInCategory(activeCategory)).map(([series, codes])=>{
