@@ -20,7 +20,7 @@ const OPTIONAL_COLS = [
   { key:'remark', label:'Remarks' },
 ]
 
-type Row = { id:string; is_section:boolean; section_name?:string; blind_type:string; control:string; location:string; fabric:string; valance:string; bottom_rail:string; mount:string; width_in:number|''; height_in:number|''; qty:number; remark:string }
+type Row = { id:string; is_section:boolean; section_name?:string; blind_type:string; control:string; location:string; fabric:string; valance:string; bottom_rail:string; mount:string; width_in:number|''; height_in:number|''; qty:number; remark:string; priced?:boolean }
 type Config = { tax_pct:number; shipping_pct:number; discount_pct:number; discount_reason:string; installation:number }
 type Product = { id:string; name:string; my_cost_per_sqm:number; factor:number }
 type Motor = { id:string; name:string; my_cost_per_unit:number; factor:number }
@@ -141,7 +141,9 @@ export default function AdminProjectPage() {
   // Minimum billable area is 1 sq.m — a window that computes smaller than that
   // still bills (and displays) as 1 sq.m. Only applies once real dimensions are
   // entered; an empty/zero row still shows as empty, not forced to 1.
-  const sqm = (w:any,h:any) => { const s = rawSqm(w,h); return s>0 ? Math.max(1,s) : 0 }
+  // Always rounds UP to the nearest 0.01 sq.m — you bill for at least the
+  // computed area, never less, matching standard fabric-industry practice.
+  const sqm = (w:any,h:any) => { const s = rawSqm(w,h); return s>0 ? Math.max(1,Math.ceil(s*100)/100) : 0 }
   const getProd = (type:string) => products.find(p=>p.name===type)||{my_cost_per_sqm:16, factor:5}
   const getMtr = (ctrl:string) => motors.find(m=>m.name===ctrl)||{my_cost_per_unit:0, factor:1}
   // Fabric selection drives the COST; blind type still drives the FACTOR.
@@ -152,11 +154,16 @@ export default function AdminProjectPage() {
   // fabric value that isn't a recognized catalog code — keeps existing
   // projects using old-style fabric names (YX2501, Standard, etc.) working
   // exactly as before.
-  const blindsQ = (r:Row) => { const p=getProd(r.blind_type); return Math.round(sqm(r.width_in,r.height_in)*p.my_cost_per_sqm*p.factor*100)/100*(r.qty||1) }
-  const motorQ = (r:Row) => { const m=getMtr(r.control); return m.my_cost_per_unit*m.factor*(r.qty||1) }
-  // raw purchase cost (no factor) — what CEB actually pays, used for In-Pocket
-  const blindsCost = (r:Row) => { const p=getProd(r.blind_type); return Math.round(sqm(r.width_in,r.height_in)*p.my_cost_per_sqm*100)/100*(r.qty||1) }
-  const motorCost = (r:Row) => { const m=getMtr(r.control); return m.my_cost_per_unit*(r.qty||1) }
+  // priced===false (eye toggled off) zeroes this row's dollar contribution
+  // everywhere — sheet totals, sidebar, quote summary, invoices — while the
+  // row itself (location, dimensions, fabric...) stays fully visible and
+  // editable. Gating it here, rather than at every call site, means every
+  // total downstream inherits this automatically.
+  const isPriced = (r:Row) => r.priced !== false
+  const blindsQ = (r:Row) => { if (!isPriced(r)) return 0; const p=getProd(r.blind_type); return Math.round(sqm(r.width_in,r.height_in)*p.my_cost_per_sqm*p.factor*100)/100*(r.qty||1) }
+  const motorQ = (r:Row) => { if (!isPriced(r)) return 0; const m=getMtr(r.control); return m.my_cost_per_unit*m.factor*(r.qty||1) }
+  const blindsCost = (r:Row) => { if (!isPriced(r)) return 0; const p=getProd(r.blind_type); return Math.round(sqm(r.width_in,r.height_in)*p.my_cost_per_sqm*100)/100*(r.qty||1) }
+  const motorCost = (r:Row) => { if (!isPriced(r)) return 0; const m=getMtr(r.control); return m.my_cost_per_unit*(r.qty||1) }
   const lineTotal = (r:Row) => (blindsQ(r)+motorQ(r))*(1-config.discount_pct/100)
   const fmt = (n:number) => (n<0?'-':'')+'$'+Math.abs(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',')
   const toastTimer = useRef<any>(null)
@@ -253,6 +260,7 @@ export default function AdminProjectPage() {
     setRows(prev=>{ const next=[...prev]; next.splice(idx+1,0,copy); return next })
   }
   const upd = (id:string, field:string, val:any) => { setRows(prev=>prev.map(r=>r.id===id?{...r,[field]:val}:r)); markDirty() }
+  const toggleRowPriced = (id:string) => { setRows(prev=>prev.map(r=>r.id===id?{...r,priced:r.priced===false?true:false}:r)); markDirty() }
 
   // ── PUSH STATE ───────────────────────────────────────────
   const markDirty = () => setIsPushed(false)
@@ -588,7 +596,7 @@ export default function AdminProjectPage() {
   // tab. Opening a real blob: URL avoids that entirely, and the Print button below
   // runs window.print() from INSIDE the new tab's own context, not the opener's.
   const printInvoice = (inv:Invoice) => {
-    const itemsRows = dataRows.map(r=>`<tr><td>${r.location||'—'}</td><td>${r.blind_type||''}</td><td>${r.control||''}</td><td style="text-align:center">${r.qty}</td></tr>`).join('')
+    const itemsRows = dataRows.filter(r=>r.priced!==false).map(r=>`<tr><td>${r.location||'—'}</td><td>${r.blind_type||''}</td><td>${r.control||''}</td><td style="text-align:center">${r.qty}</td></tr>`).join('')
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${inv.invoice_number}</title><style>
       body{font-family:Arial,sans-serif;padding:32px;max-width:720px;margin:0 auto;color:#1C1C1E;}
       .hdr{display:flex;align-items:center;gap:16px;border-bottom:3px solid #8B6914;padding-bottom:14px;margin-bottom:18px;}
@@ -776,6 +784,11 @@ export default function AdminProjectPage() {
           const k = key.toLowerCase().replace(/[\s_\-\(\)\/]/g,'')
           for (const c of candidates) {
             const cv = c.toLowerCase().replace(/[\s_\-\(\)\/]/g,'')
+            // A single-character candidate (e.g. 'w' for width, 'h' for height)
+            // must match the WHOLE header exactly — substring matching on one
+            // letter is what caused Height to silently pick up Width's column
+            // (almost any header contains 'h' or 'w' somewhere).
+            if (cv.length <= 1) { if (k === cv) return String(row[key]).trim(); continue }
             if (k===cv || k.includes(cv) || cv.includes(k)) return String(row[key]).trim()
           }
         }
@@ -1044,13 +1057,13 @@ export default function AdminProjectPage() {
             </div>
             <div style={{display:'flex',justifyContent:'flex-end',alignItems:'baseline',gap:10,padding:'10px 16px 4px',background:'#fff',flexShrink:0,flexWrap:'wrap'}}>
               <span style={{fontFamily:"'Playfair Display',serif",fontStyle:'italic',fontWeight:600,fontSize:23,color:'#C0392B',lineHeight:1}}>{project.name}</span>
-              {project.address && <span style={{fontFamily:"'Playfair Display',serif",fontStyle:'italic',fontSize:15,color:'#8B6914',lineHeight:1}}>{project.address}</span>}
+              {project.address && <span style={{fontFamily:"'Playfair Display',serif",fontStyle:'italic',fontSize:15,color:'#C0392B',opacity:.8,lineHeight:1}}>{project.address}</span>}
             </div>
             <div className="sheet-scroll" style={{flex:1,overflow:'auto'}}>
               <table style={{borderCollapse:'collapse',minWidth:'100%',fontSize:12}}>
                 <thead>
                   <tr>
-                    <th style={{...th,width:48,background:'#E5E2DB',textAlign:'center'}}>#</th>
+                    <th style={{...th,width:64,background:'#E5E2DB',textAlign:'center'}}>#</th>
                     <th style={thCust}>Blind Type ✏</th>
                     <th style={thCust}>Control ✏</th>
                     <th style={th}>Location</th>
@@ -1098,15 +1111,21 @@ export default function AdminProjectPage() {
                     const num_ = (field:string, val:any) => (
                       <input type="number" value={val} onChange={e=>upd(r.id,field,e.target.value)} step="0.01" style={{...inp,textAlign:'center'}}/>
                     )
+                    const rowPriced = r.priced !== false
                     return (
                       <tr key={r.id}
                         onDragOver={e=>{e.preventDefault(); if(dragRowId && dragOverRowId!==r.id) setDragOverRowId(r.id)}}
                         onDragLeave={()=>setDragOverRowId(prev=>prev===r.id?null:prev)}
                         onDrop={()=>{ if (dragRowId) reorderRow(dragRowId, r.id); setDragRowId(null); setDragOverRowId(null) }}
                         onDragEnd={()=>{ setDragRowId(null); setDragOverRowId(null) }}
-                        style={{borderBottom:'1px solid #E2DDD6',borderTop:dragOverRowId===r.id?'2px solid #C9A84C':undefined,background:sel?'#FEF9EC':idx%2===0?'#fff':'#FAF8F5',cursor:'pointer'}} onClick={()=>setSelId(r.id)}>
-                        <td style={{...td,width:48,textAlign:'center',fontSize:10,color:sel?'#1C1C1E':'#9AA5B4',background:sel?'#C9A84C':'#F5F2EB',borderRight:'2px solid #E2DDD6'}}>
+                        style={{borderBottom:'1px solid #E2DDD6',borderTop:dragOverRowId===r.id?'2px solid #C9A84C':undefined,background:sel?'#FEF9EC':idx%2===0?'#fff':'#FAF8F5',cursor:'pointer',opacity:rowPriced?1:0.5}} onClick={()=>setSelId(r.id)}>
+                        <td style={{...td,width:64,textAlign:'center',fontSize:10,color:sel?'#1C1C1E':'#9AA5B4',background:sel?'#C9A84C':'#F5F2EB',borderRight:'2px solid #E2DDD6'}}>
                           <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>
+                            <button tabIndex={-1} onClick={e=>{e.stopPropagation(); toggleRowPriced(r.id)}}
+                              title={rowPriced?'Included in totals — click to exclude this row':'Excluded from totals — click to include this row'}
+                              style={{background:'none',border:'none',cursor:'pointer',fontSize:12,padding:'2px 3px',color:rowPriced?(sel?'#1C1C1E':'#9AA5B4'):'#E53E3E'}}>
+                              {rowPriced?'👁':'🚫'}
+                            </button>
                             <span
                               draggable
                               onDragStart={e=>{ setDragRowId(r.id); e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', r.id) }}
@@ -1575,7 +1594,7 @@ export default function AdminProjectPage() {
                               </div>
                               {dataRows.length>0 && (
                                 <div style={{marginBottom:12}}>
-                                  <div style={{fontSize:10,fontWeight:700,color:'#9AA5B4',textTransform:'uppercase',marginBottom:6}}>Items in this project ({dataRows.length})</div>
+                                  <div style={{fontSize:10,fontWeight:700,color:'#9AA5B4',textTransform:'uppercase',marginBottom:6}}>Items in this project ({dataRows.filter(r=>r.priced!==false).length})</div>
                                   <table style={{width:'100%',fontSize:11,borderCollapse:'collapse'}}>
                                     <thead><tr style={{borderBottom:'1px solid #E2DDD6',textAlign:'left'}}>
                                       <th style={{padding:'0 0 5px',fontSize:9,color:'#9AA5B4'}}>Location</th>
@@ -1584,7 +1603,7 @@ export default function AdminProjectPage() {
                                       <th style={{padding:'0 0 5px',fontSize:9,color:'#9AA5B4',textAlign:'center'}}>Qty</th>
                                     </tr></thead>
                                     <tbody>
-                                      {dataRows.map(r=>(
+                                      {dataRows.filter(r=>r.priced!==false).map(r=>(
                                         <tr key={r.id} style={{borderBottom:'1px solid #F0EDE8'}}>
                                           <td style={{padding:'4px 0'}}>{r.location||'—'}</td>
                                           <td style={{padding:'4px 0'}}>{r.blind_type}</td>
