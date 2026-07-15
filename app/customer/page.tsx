@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase-server'
+import SessionBar from '@/components/SessionBar'
 
 const statusColor: Record<string,{bg:string,fg:string}> = {
   draft:{bg:'#FEF3C7',fg:'#92400E'}, sent:{bg:'#DBEAFE',fg:'#1E40AF'}, viewed:{bg:'#EDE9FE',fg:'#5B21B6'},
@@ -21,14 +22,11 @@ export default async function CustomerDashboard() {
   return (
     <div style={{minHeight:'100vh',background:'#F7F4EF',fontFamily:'Inter,sans-serif'}}>
       <header style={{height:56,background:'#1C1C1E',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 20px'}}>
-        <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <img src="/ceb-logo.jpg" alt="CEB" style={{width:32,height:32,objectFit:'contain'}}/>
+        <a href="/catalog" style={{display:'flex',alignItems:'center',gap:10,textDecoration:'none'}}>
+          <img src="/ceb-logo.jpg" alt="CEB" style={{width:32,height:32,objectFit:'contain',cursor:'pointer'}}/>
           <span style={{fontFamily:'Playfair Display,serif',fontSize:15,color:'#fff'}}>Custom <span style={{color:'#C9A84C'}}>Elegant</span> Blinds</span>
-        </div>
-        <div style={{display:'flex',alignItems:'center',gap:12}}>
-          {customer?.name && <span style={{fontSize:12,color:'#fff'}}>{customer.name}</span>}
-          <a href="/auth/logout" style={{fontSize:11,color:'rgba(255,255,255,.5)',textDecoration:'none',border:'1px solid rgba(255,255,255,.15)',padding:'5px 12px',borderRadius:6}}>Sign Out</a>
-        </div>
+        </a>
+        <SessionBar variant="dark"/>
       </header>
 
       <main style={{maxWidth:820,margin:'0 auto',padding:'40px 20px'}}>

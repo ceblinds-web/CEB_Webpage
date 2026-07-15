@@ -50,7 +50,7 @@ export default function RegisterPage() {
       <div style={{height:4,background:'linear-gradient(90deg,#8B1A1A,#C9A84C,#8B1A1A)',position:'absolute',top:0,left:0,right:0}}/>
       <div style={{background:'#fff',borderRadius:16,padding:'40px 40px',width:400,maxWidth:'90vw',boxShadow:'0 24px 64px rgba(0,0,0,.35)',position:'relative'}}>
         <div style={{textAlign:'center',marginBottom:28}}>
-          <img src="/ceb-logo.jpg" alt="CEB" style={{width:64,height:64,objectFit:'contain',marginBottom:10}}/>
+          <a href="/catalog"><img src="/ceb-logo.jpg" alt="CEB" style={{width:64,height:64,objectFit:'contain',marginBottom:10,cursor:'pointer'}}/></a>
           <h1 style={{fontFamily:'Playfair Display,serif',fontSize:22,color:'#1C1C1E',margin:'0 0 4px'}}>Create Account</h1>
           <p style={{fontSize:12,color:'#9AA5B4',margin:0}}>Custom Elegant Blinds Portal</p>
         </div>
@@ -79,6 +79,9 @@ export default function RegisterPage() {
         </form>
         <p style={{textAlign:'center',fontSize:12,color:'#9AA5B4',marginTop:16}}>
           Already have an account? <a href="/auth/login" style={{color:'#8B6914',fontWeight:600,textDecoration:'none'}}>Sign in</a>
+        </p>
+        <p style={{textAlign:'center',fontSize:12,color:'#9AA5B4',marginTop:8}}>
+          <a href="/catalog" style={{color:'#9AA5B4',textDecoration:'none'}}>← Browse our fabric catalog</a>
         </p>
       </div>
     </div>

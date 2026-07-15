@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase-server'
+import SessionBar from '@/components/SessionBar'
 
 export default async function AdminLanding() {
   const supabase = createClient()
@@ -12,8 +13,9 @@ export default async function AdminLanding() {
 
   return (
     <div style={{minHeight:'100vh',background:'#1C1C1E',fontFamily:'Inter,sans-serif',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',position:'relative',overflow:'hidden'}}>
+      <div style={{position:'absolute',top:20,right:24,zIndex:2}}><SessionBar variant="dark"/></div>
       <div style={{position:'absolute',inset:0,background:'radial-gradient(circle at 30% 20%, rgba(201,168,76,.08), transparent 50%), radial-gradient(circle at 80% 80%, rgba(139,26,26,.12), transparent 50%)'}}/>
-      <a href="/admin"><img src="/ceb-logo.jpg" alt="CEB" style={{width:110,height:110,objectFit:'contain',marginBottom:22,position:'relative'}}/></a>
+      <a href="/catalog"><img src="/ceb-logo.jpg" alt="CEB" style={{width:110,height:110,objectFit:'contain',marginBottom:22,position:'relative',cursor:'pointer'}}/></a>
       <div style={{fontFamily:'Playfair Display,serif',fontSize:30,color:'#fff',marginBottom:6,position:'relative'}}>Custom Elegant Blinds</div>
       <div style={{fontSize:12,color:'#C9A84C',letterSpacing:'1.5px',textTransform:'uppercase',marginBottom:36,position:'relative'}}>Business Portal</div>
       <div style={{fontSize:13,color:'rgba(255,255,255,.5)',marginBottom:22,position:'relative'}}>Welcome back{profile?.full_name?`, ${profile.full_name}`:''}</div>

@@ -1044,7 +1044,7 @@ export default function AdminProjectPage() {
             </div>
             <div style={{display:'flex',justifyContent:'flex-end',alignItems:'baseline',gap:10,padding:'10px 16px 4px',background:'#fff',flexShrink:0,flexWrap:'wrap'}}>
               <span style={{fontFamily:"'Playfair Display',serif",fontStyle:'italic',fontWeight:600,fontSize:23,color:'#C0392B',lineHeight:1}}>{project.name}</span>
-              {project.address && <span style={{fontFamily:"'Playfair Display',serif",fontStyle:'italic',fontSize:15,color:'#C0392B',opacity:.8,lineHeight:1}}>{project.address}</span>}
+              {project.address && <span style={{fontFamily:"'Playfair Display',serif",fontStyle:'italic',fontSize:15,color:'#8B6914',lineHeight:1}}>{project.address}</span>}
             </div>
             <div className="sheet-scroll" style={{flex:1,overflow:'auto'}}>
               <table style={{borderCollapse:'collapse',minWidth:'100%',fontSize:12}}>

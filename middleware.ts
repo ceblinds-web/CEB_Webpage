@@ -22,7 +22,7 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   const path = request.nextUrl.pathname
   // Public routes — no auth needed
-  if (path.startsWith('/auth') || path.startsWith('/quote') || path.startsWith('/catalog') || path.startsWith('/api/fabrics/public')) {
+  if (path.startsWith('/auth') || path.startsWith('/quote') || path.startsWith('/catalog') || path.startsWith('/api/fabrics/public') || path.startsWith('/api/vendor-catalog/public') || path.startsWith('/api/me')) {
     return supabaseResponse
   }
   // Not logged in → root goes to the public catalog (this IS the landing

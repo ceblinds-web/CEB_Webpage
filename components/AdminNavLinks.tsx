@@ -3,6 +3,7 @@
 // Project Home / Reports / Gallery / Sign Out look and behave identically
 // everywhere instead of each page hand-rolling its own version.
 'use client'
+import SessionBar from './SessionBar'
 
 const LINK_STYLE = {
   fontSize: 12,
@@ -39,12 +40,7 @@ export default function AdminNavLinks({ active }: { active: 'home' | 'reports' |
           </a>
         )
       })}
-      <a
-        href="/auth/logout"
-        style={{ ...LINK_STYLE, color: 'rgba(255,255,255,.5)', background: 'none', border: '1px solid rgba(255,255,255,.15)' }}
-      >
-        Sign Out
-      </a>
+      <SessionBar variant="dark" />
     </div>
   )
 }
