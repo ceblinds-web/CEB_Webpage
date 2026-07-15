@@ -10,7 +10,7 @@ const CATEGORIES = [
     desc:'Dual-layer sheer/solid fabric bands for adjustable light control.' },
   { key:'honeycomb', name:'Honey Comb Shades', cover:'/catalog/_covers/honeycomb-collection-cover.jpg', ready:true,
     desc:'Cellular insulating structure — energy efficient, clean lines.' },
-  { key:'dream_curtain', name:'Dream Curtains', cover:'/catalog/_covers/dream-curtain-collection-cover-v2.jpg', ready:false,
+  { key:'dream_curtain', name:'Dream Curtains', cover:'/catalog/_covers/dream-curtain-collection-cover-v2.jpg', ready:true,
     desc:'Soft flowing drapery with motorized or chain control.' },
   { key:'roller', name:'Roller Shades', cover:null, ready:false,
     desc:'Minimalist single-fabric roll, inside or outside mount.' },
@@ -76,6 +76,15 @@ const CONFIRMED_SERIES: Record<string,{image:string}> = {
   'honeycomb-HC-20': { image:'/catalog/honeycomb/zstarr/HC-20.jpg' },
   'honeycomb-HC-21': { image:'/catalog/honeycomb/zstarr/HC-21.jpg' },
   'honeycomb-HC-22': { image:'/catalog/honeycomb/zstarr/HC-22.jpg' },
+  'honeycomb-HC-16mm': { image:'/catalog/honeycomb/zstarr/HC-16mm.jpg' },
+  'honeycomb-HC-20mm': { image:'/catalog/honeycomb/zstarr/HC-20mm.jpg' },
+  'dream_curtain-31126': { image:'/catalog/dream_curtain/zstarr/31126.jpg' },
+  'dream_curtain-31127': { image:'/catalog/dream_curtain/zstarr/31127.jpg' },
+  'dream_curtain-31128': { image:'/catalog/dream_curtain/zstarr/31128.jpg' },
+  'dream_curtain-31129': { image:'/catalog/dream_curtain/zstarr/31129.jpg' },
+  'dream_curtain-31130': { image:'/catalog/dream_curtain/zstarr/31130-31131.jpg' },
+  'dream_curtain-31131': { image:'/catalog/dream_curtain/zstarr/31130-31131.jpg' },
+  'dream_curtain-31132': { image:'/catalog/dream_curtain/zstarr/31132.jpg' },
 }
 
 export default function CatalogPage() {
