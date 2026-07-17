@@ -30,7 +30,7 @@ export default async function AdminLanding() {
       <div style={{marginTop:56,display:'flex',alignItems:'center',gap:14,color:'rgba(255,255,255,.3)',fontSize:11,position:'relative'}}>
         <span>Interior Design</span><span>·</span><span>Design &amp; Build</span><span>·</span><span>Procurement</span>
       </div>
-      <div style={{fontSize:10,color:'#8B6914',marginTop:6,letterSpacing:'1px',position:'relative'}}>ceblinds.click · Monroe, WA</div>
+      <div style={{fontSize:10,color:'#8B6914',marginTop:6,letterSpacing:'1px',position:'relative'}}>customelegantblinds.com · Monroe, WA</div>
     </div>
   )
 }

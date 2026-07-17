@@ -2,6 +2,12 @@
 import { createAdminClient } from '@/lib/supabase-server'
 import { notFound } from 'next/navigation'
 
+const CONV = 0.00064516
+function sqm(w: any, h: any) {
+  const s = parseFloat(w || 0) * parseFloat(h || 0) * CONV
+  return s > 0 ? Math.max(1, s) : 0
+}
+
 export default async function QuotePage({ params }: { params: { id: string } }) {
   const supabase = createAdminClient()
   const { data: project } = await supabase
@@ -18,15 +24,28 @@ export default async function QuotePage({ params }: { params: { id: string } }) 
       .eq('project_id', params.id).eq('event_type','quote_sent').is('viewed_at',null)
   }
 
+  // Pricing MUST come from the actual products/motors config, the same way
+  // the admin sheet computes it — the previous version hardcoded cost=16,
+  // factor=5 for every row regardless of blind type, and never accounted for
+  // motors at all, so this public-facing total could silently disagree with
+  // what the project actually charges.
+  const [{ data: products }, { data: motors }] = await Promise.all([
+    supabase.from('products').select('name, my_cost_per_sqm, factor').eq('is_active', true),
+    supabase.from('motors').select('name, my_cost_per_unit, factor').eq('is_active', true),
+  ])
+  const getProd = (name: string) => (products || []).find((p: any) => p.name === name) || { my_cost_per_sqm: 0, factor: 0 }
+  const getMotor = (name: string) => (motors || []).find((m: any) => m.name === name) || { my_cost_per_unit: 0, factor: 0 }
+  const blindsQ = (r: any) => Math.round(sqm(r.width_in, r.height_in) * getProd(r.blind_type).my_cost_per_sqm * getProd(r.blind_type).factor * 100) / 100 * (r.qty || 1)
+  const motorQ = (r: any) => getMotor(r.control).my_cost_per_unit * getMotor(r.control).factor * (r.qty || 1)
+
   const rows = (project.project_rows||[]).sort((a:any,b:any)=>a.sort_order-b.sort_order)
   const cfg = project.project_config || {tax_pct:10,shipping_pct:18,discount_pct:0,installation:500}
   const fees = project.project_fees || []
-  const CONV=0.00064516
-  const sqm=(w:any,h:any)=>parseFloat(w||0)*parseFloat(h||0)*CONV
   const fmt=(n:number)=>'$'+Math.abs(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',')
   const dataRows=rows.filter((r:any)=>!r.is_section)
-  const totBlind=dataRows.reduce((s:number,r:any)=>s+(r.width_in&&r.height_in?Math.round(sqm(r.width_in,r.height_in)*16*5*100)/100*(r.qty||1):0),0)
-  const sub=(totBlind)*(1-cfg.discount_pct/100)
+  const totBlind = dataRows.reduce((s:number,r:any)=>s+blindsQ(r),0)
+  const totMotor = dataRows.reduce((s:number,r:any)=>s+motorQ(r),0)
+  const sub=(totBlind+totMotor)*(1-cfg.discount_pct/100)
   const tax=sub*(cfg.tax_pct/100)
   const ship=sub*(cfg.shipping_pct/100)
   const extraTotal=fees.reduce((s:number,f:any)=>s+(f.fee_type==='pct'?sub*(f.value/100):f.value),0)
@@ -38,7 +57,7 @@ export default async function QuotePage({ params }: { params: { id: string } }) 
         <div style={{textAlign:'center',marginBottom:32}}>
           <div style={{fontSize:40,marginBottom:8}}>🪟</div>
           <h1 style={{fontFamily:'Georgia,serif',fontSize:24,color:'#8B6914',margin:0}}>Custom Elegant Blinds</h1>
-          <p style={{color:'#9AA5B4',fontSize:13,marginTop:4}}>ceblinds.click · Edmonds, WA</p>
+          <p style={{color:'#9AA5B4',fontSize:13,marginTop:4}}>customelegantblinds.com · Monroe, WA</p>
         </div>
         <div style={{background:'#fff',borderRadius:10,padding:'20px 24px',marginBottom:20,border:'1px solid #E2DDD6'}}>
           <h2 style={{fontFamily:'Georgia,serif',fontSize:20,marginBottom:4}}>{project.name} — Quote</h2>
@@ -72,7 +91,7 @@ export default async function QuotePage({ params }: { params: { id: string } }) 
         </div>
         <div style={{display:'flex',justifyContent:'flex-end'}}>
           <div style={{width:300,background:'#fff',border:'1px solid #E2DDD6',borderRadius:10,padding:20}}>
-            {[[`Discount (${cfg.discount_pct}%)`,cfg.discount_pct>0?'-'+fmt((totBlind)*cfg.discount_pct/100):null],[`Tax @${cfg.tax_pct}%`,fmt(tax)],[`Shipping (${cfg.shipping_pct}%)`,fmt(ship)],['Installation',fmt(cfg.installation)],...fees.map((f:any)=>[f.label,fmt(f.fee_type==='pct'?sub*(f.value/100):f.value)])].filter(([,v])=>v).map(([l,v])=>(
+            {[[`Discount (${cfg.discount_pct}%)`,cfg.discount_pct>0?'-'+fmt((totBlind+totMotor)*cfg.discount_pct/100):null],[`Tax @${cfg.tax_pct}%`,fmt(tax)],[`Shipping (${cfg.shipping_pct}%)`,fmt(ship)],['Installation',fmt(cfg.installation)],...fees.map((f:any)=>[f.label,fmt(f.fee_type==='pct'?sub*(f.value/100):f.value)])].filter(([,v])=>v).map(([l,v])=>(
               <div key={l as string} style={{display:'flex',justifyContent:'space-between',marginBottom:8,fontSize:13}}>
                 <span style={{color:'#4A5568'}}>{l}</span>
                 <span style={{fontWeight:600,color:String(l).includes('Discount')?'#27AE60':'#1C1C1E'}}>{v}</span>
@@ -85,7 +104,7 @@ export default async function QuotePage({ params }: { params: { id: string } }) 
           </div>
         </div>
         <div style={{textAlign:'center',marginTop:32,fontSize:11,color:'#9AA5B4',borderTop:'1px solid #E2DDD6',paddingTop:20}}>
-          Custom Elegant Blinds LLC · ceblinds.click · Edmonds, WA<br/>
+          Custom Elegant Blinds LLC · customelegantblinds.com · Monroe, WA<br/>
           This is a computer-generated quote. Valid for 30 days from date issued.
         </div>
       </div>

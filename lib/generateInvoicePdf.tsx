@@ -44,7 +44,7 @@ function InvoiceDocument(d: InvoicePdfData) {
           {d.logoUrl && <Image src={d.logoUrl} style={styles.logo} />}
           <View>
             <Text style={styles.brand}>Custom Elegant Blinds</Text>
-            <Text style={styles.tagline}>Zebra Blinds · Honey Comb · Dream Curtain · ceblinds.click · Monroe, WA</Text>
+            <Text style={styles.tagline}>Zebra Blinds · Honey Comb · Dream Curtain · customelegantblinds.com · Monroe, WA</Text>
           </View>
         </View>
 
@@ -72,7 +72,7 @@ function InvoiceDocument(d: InvoicePdfData) {
           </View>
         </View>
 
-        <Text style={styles.footer}>Custom Elegant Blinds LLC · ceblinds.click · Monroe, WA — This is a computer-generated invoice.</Text>
+        <Text style={styles.footer}>Custom Elegant Blinds LLC · customelegantblinds.com · Monroe, WA — This is a computer-generated invoice.</Text>
       </Page>
     </Document>
   )

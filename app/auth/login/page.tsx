@@ -30,7 +30,7 @@ export default function LoginPage() {
         <a href="/catalog"><img src="/ceb-logo.jpg" alt="CEB" style={{width:160,height:160,borderRadius:'50%',objectFit:'cover',border:'3px solid rgba(201,168,76,.5)',boxShadow:'0 0 60px rgba(201,168,76,.15)',marginBottom:28,position:'relative',cursor:'pointer'}}/></a>
         <h1 style={{fontFamily:'Playfair Display,serif',fontSize:28,color:'#fff',textAlign:'center',margin:'0 0 8px',position:'relative'}}>Custom Elegant Blinds</h1>
         <p style={{fontSize:12,color:'rgba(255,255,255,.4)',textAlign:'center',letterSpacing:'1.5px',textTransform:'uppercase',position:'relative'}}>Interior Design · Design & Build · Procurement</p>
-        <div style={{position:'relative',marginTop:40,fontSize:11,color:'rgba(255,255,255,.2)',letterSpacing:'1px'}}>ceblinds.click · Monroe, WA</div>
+        <div style={{position:'relative',marginTop:40,fontSize:11,color:'rgba(255,255,255,.2)',letterSpacing:'1px'}}>customelegantblinds.com · Monroe, WA</div>
       </div>
 
       {/* Right — login form */}
