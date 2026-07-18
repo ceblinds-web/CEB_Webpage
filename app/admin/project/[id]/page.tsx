@@ -576,8 +576,11 @@ export default function AdminProjectPage() {
           if (linkRes.ok && linkData.url) { payLink = linkData.url; setPaymentLinks(prev=>({...prev,[inv.id]:linkData.url})) }
         } catch { /* non-fatal — email still sends without the link */ }
       }
-      const subject = `Invoice ${inv.invoice_number} — ${inv.status==='paid'?'Payment Confirmation':`Due ${fmt(inv.total_amount||0)}`}`
-      const body = `Hi ${project?.customers?.name||''},\n\nPlease find your invoice ${inv.invoice_number} for ${project?.name} attached as a PDF.\n\n${(inv.invoice_type||'').toUpperCase()} — ${inv.pct_of_total}% of project total\nAmount Due: ${fmt(inv.total_amount||0)}${payLink?`\n\nPay online: ${payLink}`:''}\n\nThank you,\nCustom Elegant Blinds`
+      const subject = `Invoice ${inv.invoice_number} — ${inv.status==='paid'?'Payment Confirmation':'Payment Options'}`
+      const cardTotal = (inv.total_amount||0) * 1.035
+      const body = inv.status==='paid'
+        ? `Hi ${project?.customers?.name||''},\n\nThank you! Your invoice ${inv.invoice_number} for ${project?.name} has been paid in full. A copy is attached as a PDF for your records.\n\nThank you for choosing Custom Elegant Blinds!\n\nBest regards,\nCustom Elegant Blinds`
+        : `Hi ${project?.customers?.name||''},\n\nYour invoice ${inv.invoice_number} for ${project?.name} is ready, with a total of ${fmt(inv.total_amount||0)} due. It's attached as a PDF for your records.\n\nYou have two easy ways to pay:\n\n1) Cash / Check — no additional fees.\n\n2) Pay online via card — click the secure payment link below. Card payments include a 3.5% processing fee, bringing your total to ${fmt(cardTotal)}.${payLink?`\n\n${payLink}`:''}\n\nIf you have any questions about your invoice or would prefer to arrange cash payment, just reply to this email and we'll take care of it.\n\nThank you for choosing Custom Elegant Blinds!\n\nBest regards,\nCustom Elegant Blinds`
       const res = await fetch('/api/emails', { method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ projectId:id, toEmail:project?.customers?.email||project?.email, subject, body, invoiceId: inv.id }) })
       const text = await res.text()
@@ -1540,14 +1543,14 @@ export default function AdminProjectPage() {
                           <button onClick={()=>toggleInvExpand(inv.id)} style={{border:'1px solid #E2DDD6',background:'#fff',padding:'6px 12px',borderRadius:6,fontSize:11,cursor:'pointer'}}>{isExp?'Hide':'👁 View / Send'}</button>
                           {inv.status!=='paid' && inv.status!=='void' && (
                             paymentLinks[inv.id] ? (
-                              <button onClick={()=>copyPaymentLink(inv.id)} title={paymentLinks[inv.id]}
+                              <button onClick={()=>copyPaymentLink(inv.id)} title={paymentLinks[inv.id]+' — includes 3.5% card surcharge'}
                                 style={{border:'1px solid #86EFAC',background:linkCopied===inv.id?'#D1FAE5':'#F0FDF4',color:'#166534',padding:'6px 10px',borderRadius:6,fontSize:11,cursor:'pointer'}}>
                                 {linkCopied===inv.id?'✓ Copied':'🔗 Copy Link'}
                               </button>
                             ) : (
-                              <button disabled={linkBusy===inv.id} onClick={()=>getPaymentLink(inv)}
+                              <button disabled={linkBusy===inv.id} onClick={()=>getPaymentLink(inv)} title="Generates a Square link — charges the invoice total plus a 3.5% card surcharge"
                                 style={{border:'1px solid #93C5FD',background:'#EFF6FF',color:'#1E40AF',padding:'6px 10px',borderRadius:6,fontSize:11,cursor:'pointer'}}>
-                                {linkBusy===inv.id?'Generating…':'🔗 Get Payment Link'}
+                                {linkBusy===inv.id?'Generating…':'🔗 Get Payment Link (+3.5%)'}
                               </button>
                             )
                           )}

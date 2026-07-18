@@ -18,9 +18,16 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
     return NextResponse.json({ url: invoice.square_payment_link, cached: true })
   }
 
+  // Card payments carry a 3.5% surcharge, disclosed to the customer in the
+  // invoice email ("cash: no fee, card: +3.5%") — applying it here too so
+  // the amount actually charged always matches what was promised, rather
+  // than the business quietly absorbing the processing fee.
+  const CARD_SURCHARGE_RATE = 0.035
+  const surchargedAmount = Number(invoice.total_amount || 0) * (1 + CARD_SURCHARGE_RATE)
+
   const result = await createSquarePaymentLink({
     invoiceNumber: invoice.invoice_number,
-    amount: Number(invoice.total_amount || 0),
+    amount: surchargedAmount,
   })
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 })
 
