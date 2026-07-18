@@ -13,8 +13,19 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
 
   // Reuse an existing link rather than generating a new checkout page every
   // time — the amount due doesn't change once an invoice exists, so the
-  // same link stays valid.
-  if (invoice.square_payment_link) {
+  // same link normally stays valid. BUT: if the cached link is from a
+  // different Square environment than the one currently configured (e.g.
+  // it was generated back when SQUARE_ENVIRONMENT was "sandbox" and you've
+  // since switched to "production"), that cached link is stale — serving
+  // it would silently keep sending customers to the wrong environment
+  // forever, since this check runs before Square is ever called again.
+  const currentEnv = process.env.SQUARE_ENVIRONMENT || 'sandbox'
+  const cachedLinkIsSandbox = invoice.square_payment_link?.includes('sandbox.square.link')
+  const cachedLinkMatchesCurrentEnv = invoice.square_payment_link
+    ? (currentEnv === 'production' ? !cachedLinkIsSandbox : cachedLinkIsSandbox)
+    : false
+
+  if (invoice.square_payment_link && cachedLinkMatchesCurrentEnv) {
     return NextResponse.json({ url: invoice.square_payment_link, cached: true })
   }
 
