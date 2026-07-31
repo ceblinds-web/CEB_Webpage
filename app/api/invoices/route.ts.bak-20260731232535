@@ -42,17 +42,14 @@ export async function POST(req: Request) {
   if (!project.grand_total) return NextResponse.json({ error: 'Push pricing on the project sheet before creating an invoice' }, { status: 400 })
 
   const { data: existing } = await supabase
-    .from('invoices').select('pct_of_total, sequence_num, status').eq('project_id', projectId).order('sequence_num')
-  // Voided invoices do NOT count toward the billed percentage
-  const active = (existing ?? []).filter((i: { status: string | null }) => i.status !== 'void')
-  const billedPct = active.reduce((s: number, i: { pct_of_total: number | null }) => s + Number(i.pct_of_total ?? 0), 0)
+    .from('invoices').select('pct_of_total, sequence_num').eq('project_id', projectId).order('sequence_num')
+  const billedPct = (existing ?? []).reduce((s: number, i: { pct_of_total: number | null }) => s + Number(i.pct_of_total ?? 0), 0)
   const remaining = 100 - billedPct
   if (pctOfTotal > remaining) {
     return NextResponse.json({ error: `% must be ${remaining} or less (remaining unbilled)` }, { status: 400 })
   }
 
-  // Sequence continues from the highest ever used (incl. voided) so numbers never collide
-  const seq = (existing ?? []).reduce((m: number, i: { sequence_num: number | null }) => Math.max(m, Number(i.sequence_num ?? 0)), 0) + 1
+  const seq = (existing?.length ?? 0) + 1
   const invoiceType = seq === 1 ? 'deposit' : (pctOfTotal + billedPct >= 100 ? 'final' : 'progress')
   const base = Number(project.grand_total) * (pctOfTotal / 100)
   const surcharge = squareSurcharge(base, method)

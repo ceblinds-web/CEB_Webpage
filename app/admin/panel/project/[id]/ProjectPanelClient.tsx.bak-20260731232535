@@ -52,7 +52,7 @@ export default function ProjectPanelClient({
 
   function refresh() { startTransition(() => router.refresh()) }
 
-  const billedPct = invoices.filter(i => i.status !== 'void').reduce((s, i) => s + Number(i.pct_of_total ?? 0), 0)
+  const billedPct = invoices.reduce((s, i) => s + Number(i.pct_of_total ?? 0), 0)
   const paidPct = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + Number(i.pct_of_total ?? 0), 0)
   const openGrievances = grievances.filter(g => g.status !== 'resolved').length
 

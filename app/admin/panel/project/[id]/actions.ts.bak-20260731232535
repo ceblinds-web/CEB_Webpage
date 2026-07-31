@@ -33,15 +33,12 @@ export async function createInvoice(projectId: string, pctOfTotal: number, metho
   if (!project.grand_total) throw new Error('Push pricing on the project sheet before creating an invoice')
 
   const { data: existing } = await supabase
-    .from('invoices').select('pct_of_total, sequence_num, status').eq('project_id', projectId).order('sequence_num')
-  // Voided invoices do NOT count toward the billed percentage
-  const active = (existing ?? []).filter((i: { status: string | null }) => i.status !== 'void')
-  const billedPct = active.reduce((s: number, i: { pct_of_total: number | null }) => s + Number(i.pct_of_total ?? 0), 0)
+    .from('invoices').select('pct_of_total, sequence_num').eq('project_id', projectId).order('sequence_num')
+  const billedPct = (existing ?? []).reduce((s: number, i: { pct_of_total: number | null }) => s + Number(i.pct_of_total ?? 0), 0)
   const remaining = 100 - billedPct
   if (pctOfTotal <= 0 || pctOfTotal > remaining) throw new Error(`% must be between 1 and ${remaining} (remaining unbilled)`)
 
-  // Sequence continues from the highest ever used (incl. voided) so numbers never collide
-  const seq = (existing ?? []).reduce((m: number, i: { sequence_num: number | null }) => Math.max(m, Number(i.sequence_num ?? 0)), 0) + 1
+  const seq = (existing?.length ?? 0) + 1
   const invoiceType = seq === 1 ? 'deposit' : (pctOfTotal + billedPct >= 100 ? 'final' : 'progress')
   const base = Number(project.grand_total) * (pctOfTotal / 100)
   const surcharge = squareSurcharge(base, method)
@@ -84,10 +81,8 @@ export async function updateInvoice(invoiceId: string, pctOfTotal: number, metho
   if (!project?.grand_total) throw new Error('Project has no grand total')
 
   const { data: others } = await supabase
-    .from('invoices').select('pct_of_total, status').eq('project_id', invoice.project_id).neq('id', invoiceId)
-  const othersPct = (others ?? [])
-    .filter((i: { status: string | null }) => i.status !== 'void')
-    .reduce((s: number, i: { pct_of_total: number | null }) => s + Number(i.pct_of_total ?? 0), 0)
+    .from('invoices').select('pct_of_total').eq('project_id', invoice.project_id).neq('id', invoiceId)
+  const othersPct = (others ?? []).reduce((s: number, i: { pct_of_total: number | null }) => s + Number(i.pct_of_total ?? 0), 0)
   if (pctOfTotal <= 0 || pctOfTotal + othersPct > 100) throw new Error(`% must be between 1 and ${100 - othersPct}`)
 
   const base = Number(project.grand_total) * (pctOfTotal / 100)
@@ -132,9 +127,8 @@ export async function markInvoicePaid(invoiceId: string) {
 
   const { data: allForProject } = await supabase
     .from('invoices').select('id, pct_of_total, status').eq('project_id', invoice.project_id)
-  const activeAll = (allForProject ?? []).filter((i: { status: string | null }) => i.status !== 'void')
-  const allPct = activeAll.reduce((s: number, i: { pct_of_total: number | null }) => s + Number(i.pct_of_total ?? 0), 0)
-  const allOthersPaid = activeAll.every((i: { id: string; status: string | null }) => i.id === invoiceId || i.status === 'paid')
+  const allPct = (allForProject ?? []).reduce((s: number, i: { pct_of_total: number | null }) => s + Number(i.pct_of_total ?? 0), 0)
+  const allOthersPaid = (allForProject ?? []).every((i: { id: string; status: string | null }) => i.id === invoiceId || i.status === 'paid')
   const fullyPaid = allOthersPaid && allPct >= 99.5
 
   const { error } = await supabase.from('invoices').update({

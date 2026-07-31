@@ -7,7 +7,7 @@ export default function ProjectHome() {
   const router = useRouter()
   const [customers, setCustomers] = useState<any[]>([])
   const [expanded, setExpanded] = useState<Record<string,boolean>>({})
-  const [quickForm, setQuickForm] = useState<Record<string,{open:boolean;name:string;email:string;addr:string;phone:string;folderId?:string|null}>>({})
+  const [quickForm, setQuickForm] = useState<Record<string,{open:boolean;name:string;email:string;addr:string;phone:string}>>({})
   const [saving, setSaving] = useState<string|null>(null)
   const [toast, setToast] = useState<{msg:string,type:'ok'|'err'}|null>(null)
 
@@ -18,12 +18,6 @@ export default function ProjectHome() {
   const [newCustForm, setNewCustForm] = useState({ name:'', email:'', phone:'', status:'active' })
   const [creatingCust, setCreatingCust] = useState(false)
 
-  // ── folders state ──
-  const [folders, setFolders] = useState<any[]>([])
-  const [projFolderMap, setProjFolderMap] = useState<Record<string,string>>({})
-  const [folderExpanded, setFolderExpanded] = useState<Record<string,boolean>>({})
-  const [dragProj, setDragProj] = useState<string|null>(null)
-
   const showToast = (msg:string, type:'ok'|'err'='ok') => { setToast({msg,type}); setTimeout(()=>setToast(null), type==='err'?6000:3000) }
 
   const load = () => fetch('/api/customers',{cache:'no-store'}).then(r=>r.json()).then(d=>{
@@ -32,62 +26,10 @@ export default function ProjectHome() {
     d.forEach((c:any) => { if (c.projects?.length) exp[c.id] = true })
     setExpanded(exp)
   })
-
-  const loadFolders = () => fetch('/api/folders',{cache:'no-store'}).then(r=>r.json()).then(d=>{
-    if (d?.folders) { setFolders(d.folders); setProjFolderMap(d.mapping||{}) }
-  }).catch(()=>{})
-
-  useEffect(()=>{ load(); loadFolders() },[])
-
-  const foldersByCust: Record<string, any[]> = {}
-  folders.forEach(f => { (foldersByCust[f.customer_id] = foldersByCust[f.customer_id] || []).push(f) })
+  useEffect(()=>{ load() },[])
 
   const statusColor: Record<string,string> = {
     draft:'#E8C96B',sent:'#93C5FD',viewed:'#D8B4FE',confirmed:'#5EEAD4',invoiced:'#FCD34D',completed:'#6EE7A0',cancelled:'#FCA5A5'
-  }
-
-  // ── folder actions ──
-  const createFolder = async (custId: string) => {
-    const name = prompt('Folder name:')
-    if (!name?.trim()) return
-    const res = await fetch('/api/folders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer_id:custId,name:name.trim()})})
-    if (!res.ok) { const d = await res.json().catch(()=>({})); showToast(d.error||'Could not create folder (did you run migration 016?)','err'); return }
-    const created = await res.json().catch(()=>null)
-    await loadFolders()
-    if (created?.id) setFolderExpanded(p=>({...p,[created.id]:true}))
-    showToast('Folder created')
-  }
-  const renameFolder = async (f: any) => {
-    const name = prompt('Rename folder:', f.name)
-    if (!name?.trim() || name.trim() === f.name) return
-    const res = await fetch(`/api/folders/${f.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name.trim()})})
-    if (!res.ok) { showToast('Rename failed','err'); return }
-    await loadFolders()
-    showToast('Folder renamed')
-  }
-  const deleteFolder = async (f: any) => {
-    if (!confirm(`Delete folder "${f.name}"? Projects inside will move to Unfiled (nothing is deleted).`)) return
-    const res = await fetch(`/api/folders/${f.id}`,{method:'DELETE'})
-    if (!res.ok) { showToast('Delete failed','err'); return }
-    await loadFolders()
-    showToast('Folder deleted — projects moved to Unfiled')
-  }
-  const moveProject = async (projId: string, folderId: string|null) => {
-    setDragProj(null)
-    const res = await fetch('/api/folders/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project_id:projId,folder_id:folderId})})
-    if (!res.ok) { showToast('Move failed','err'); return }
-    await loadFolders()
-    showToast(folderId ? 'Moved to folder' : 'Moved to Unfiled')
-  }
-  const exportExcel = (projId: string, e?: any) => {
-    e?.stopPropagation?.()
-    window.location.href = `/api/projects/${projId}/export`
-  }
-
-  const openQuickForm = (c:any, folderId: string|null) => {
-    setExpanded(p=>({...p,[c.id]:true}))
-    if (folderId) setFolderExpanded(p=>({...p,[folderId]:true}))
-    setQuickForm(p=>({...p,[c.id]:{open:true,name:'',email:c.email,addr:'',phone:c.phone||'',folderId}}))
   }
 
   const quickCreate = async (custId: string, custEmail: string) => {
@@ -103,11 +45,7 @@ export default function ProjectHome() {
       let data:any = {}
       try { data = text?JSON.parse(text):{} } catch { showToast('Server returned an unexpected response','err'); return }
       if (!res.ok) { showToast(data.error||'Could not create project — try again','err'); return }
-      // If created from inside a folder, file it there before navigating
-      if (qf.folderId && data.id) {
-        await fetch('/api/folders/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project_id:data.id,folder_id:qf.folderId})}).catch(()=>{})
-      }
-      setQuickForm(p=>({...p,[custId]:{open:false,name:'',email:'',addr:'',phone:'',folderId:null}}))
+      setQuickForm(p=>({...p,[custId]:{open:false,name:'',email:'',addr:'',phone:''}}))
       router.push(`/admin/project/${data.id}`)
     } catch (err:any) {
       showToast('Network error: '+err.message,'err')
@@ -118,7 +56,7 @@ export default function ProjectHome() {
     e?.stopPropagation?.()
     if (!confirm(`Delete project "${projName}"? This cannot be undone.`)) return
     await fetch(`/api/projects/${projId}`, { method:'DELETE' })
-    load(); loadFolders()
+    load()
   }
 
   const createCustomer = async () => {
@@ -158,57 +96,6 @@ export default function ProjectHome() {
 
   const allProjects = customers.flatMap(c=>(c.projects||[]).map((p:any)=>({...p,customerName:c.name})))
 
-  // ── sidebar project row (draggable, with Excel + delete buttons) ──
-  const projRow = (p:any) => (
-    <div key={p.id}
-      draggable
-      onDragStart={()=>setDragProj(p.id)}
-      onDragEnd={()=>setDragProj(null)}
-      title="Drag onto a folder to move"
-      style={{display:'flex',alignItems:'center',gap:6,padding:'7px 10px',borderRadius:5,fontSize:13,marginBottom:2,
-        opacity: dragProj===p.id ? .45 : 1, cursor:'grab'}}>
-      <span onClick={()=>router.push(`/admin/project/${p.id}`)} style={{display:'flex',alignItems:'center',gap:5,flex:1,cursor:'pointer',color:'rgba(255,255,255,.5)',minWidth:0}}>
-        <span style={{fontSize:13,flexShrink:0}}>📋</span>
-        <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
-        <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:6,background:'rgba(255,255,255,.08)',color:statusColor[p.status]||'#E8C96B',flexShrink:0}}>{p.status}</span>
-      </span>
-      <button onClick={e=>exportExcel(p.id, e)} title="Download Excel"
-        style={{background:'none',border:'none',color:'rgba(94,234,212,.7)',cursor:'pointer',fontSize:12,padding:'2px 3px',flexShrink:0,lineHeight:1}}>⬇</button>
-      <button onClick={e=>deleteProject(p.id, p.name, e)} title="Delete project"
-        style={{background:'none',border:'none',color:'rgba(239,68,68,.5)',cursor:'pointer',fontSize:12,padding:'2px 4px',flexShrink:0,lineHeight:1}}>✕</button>
-    </div>
-  )
-
-  // ── quick-create form (used at customer level and inside folders) ──
-  const quickFormBox = (c:any, qf:any) => {
-    const targetFolder = qf.folderId ? folders.find((f:any)=>f.id===qf.folderId) : null
-    return (
-      <div style={{margin:'6px 4px 8px',padding:'10px',background:'rgba(201,168,76,.08)',borderRadius:7,border:'1px solid rgba(201,168,76,.2)'}}>
-        <div style={{fontSize:11,fontWeight:700,color:'#C9A84C',marginBottom:8}}>
-          New Project{targetFolder ? <span style={{color:'rgba(255,255,255,.6)',fontWeight:400}}> → 📁 {targetFolder.name}</span> : null}
-        </div>
-        <input autoFocus placeholder="Project name *" value={qf.name}
-          onChange={e=>setQuickForm(p=>({...p,[c.id]:{...qf,name:e.target.value}}))}
-          onKeyDown={e=>{ if(e.key==='Enter') quickCreate(c.id,c.email) }}
-          style={{width:'100%',padding:'5px 7px',border:'1px solid rgba(201,168,76,.3)',borderRadius:4,fontSize:12,background:'#2a2a2a',color:'#fff',marginBottom:5,outline:'none',boxSizing:'border-box'}}/>
-        <input placeholder={`Email (${c.email})`} value={qf.email}
-          onChange={e=>setQuickForm(p=>({...p,[c.id]:{...qf,email:e.target.value}}))}
-          style={{width:'100%',padding:'5px 7px',border:'1px solid rgba(255,255,255,.1)',borderRadius:4,fontSize:12,background:'#2a2a2a',color:'#fff',marginBottom:5,outline:'none',boxSizing:'border-box'}}/>
-        <input placeholder="Address" value={qf.addr}
-          onChange={e=>setQuickForm(p=>({...p,[c.id]:{...qf,addr:e.target.value}}))}
-          style={{width:'100%',padding:'5px 7px',border:'1px solid rgba(255,255,255,.1)',borderRadius:4,fontSize:12,background:'#2a2a2a',color:'#fff',marginBottom:7,outline:'none',boxSizing:'border-box'}}/>
-        <div style={{display:'flex',gap:5}}>
-          <button onClick={()=>quickCreate(c.id,c.email)} disabled={saving===c.id}
-            style={{flex:1,background:'#C9A84C',color:'#1C1C1E',border:'none',padding:'6px',borderRadius:5,fontSize:11,fontWeight:700,cursor:'pointer'}}>
-            {saving===c.id?'Creating…':'✓ Create'}
-          </button>
-          <button onClick={()=>setQuickForm(p=>({...p,[c.id]:{...qf,open:false}}))}
-            style={{background:'transparent',color:'#9AA5B4',border:'1px solid rgba(255,255,255,.1)',padding:'6px 10px',borderRadius:5,fontSize:11,cursor:'pointer'}}>✕</button>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div style={{display:'flex',flexDirection:'column',height:'100vh',fontFamily:'Inter,sans-serif',background:'#F7F4EF'}}>
       <header style={{height:56,background:'#1C1C1E',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 20px',flexShrink:0}}>
@@ -228,9 +115,7 @@ export default function ProjectHome() {
           <div style={{fontSize:11,fontWeight:700,letterSpacing:'1.2px',textTransform:'uppercase',color:'#9AA5B4',marginBottom:9}}>Customers</div>
           {customers.map(c=>{
             const isExp = !!expanded[c.id]
-            const qf = quickForm[c.id]||{open:false,name:'',email:'',addr:'',phone:'',folderId:null}
-            const custFolders = foldersByCust[c.id]||[]
-            const unfiled = (c.projects||[]).filter((p:any)=>!projFolderMap[p.id])
+            const qf = quickForm[c.id]||{open:false,name:'',email:'',addr:'',phone:''}
             return (
               <div key={c.id} style={{marginBottom:2}}>
                 <div style={{display:'flex',alignItems:'center',gap:7,padding:'8px 10px',borderRadius:7,cursor:'pointer',background:isExp?'rgba(255,255,255,.05)':'transparent'}}
@@ -240,78 +125,50 @@ export default function ProjectHome() {
                   <span style={{flex:1,color:'rgba(255,255,255,.7)',fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
                   <span style={{fontSize:10,background:'rgba(255,255,255,.08)',color:'#9AA5B4',padding:'2px 6px',borderRadius:8,flexShrink:0}}>{c.projects?.length||0}</span>
                   <button
-                    onClick={e=>{ e.stopPropagation(); createFolder(c.id) }}
-                    title="New folder" style={{background:'none',border:'none',color:'rgba(255,255,255,.4)',cursor:'pointer',fontSize:13,padding:'0 2px',flexShrink:0,lineHeight:1}}>📁</button>
-                  <button
-                    onClick={e=>{ e.stopPropagation(); openQuickForm(c, null) }}
+                    onClick={e=>{ e.stopPropagation(); setExpanded(p=>({...p,[c.id]:true})); setQuickForm(p=>({...p,[c.id]:{open:true,name:'',email:c.email,addr:'',phone:c.phone||''}})) }}
                     title="Add project" style={{background:'none',border:'none',color:'rgba(201,168,76,.7)',cursor:'pointer',fontSize:16,padding:'0 3px',flexShrink:0,lineHeight:1}}>＋</button>
                 </div>
 
                 {isExp && (
                   <div style={{paddingLeft:20,paddingBottom:4}}>
-                    {/* ── FOLDERS ── */}
-                    {custFolders.map((f:any)=>{
-                      const fProjects = (c.projects||[]).filter((p:any)=>projFolderMap[p.id]===f.id)
-                      const fExp = !!folderExpanded[f.id]
-                      return (
-                        <div key={f.id}>
-                          <div
-                            onClick={()=>setFolderExpanded(p=>({...p,[f.id]:!p[f.id]}))}
-                            onDragOver={e=>e.preventDefault()}
-                            onDrop={e=>{ e.preventDefault(); if (dragProj) moveProject(dragProj, f.id) }}
-                            style={{display:'flex',alignItems:'center',gap:6,padding:'6px 8px',borderRadius:5,cursor:'pointer',
-                              fontSize:12,color:'rgba(255,255,255,.65)',marginBottom:2,
-                              background: dragProj ? 'rgba(201,168,76,.12)' : 'transparent',
-                              border: dragProj ? '1px dashed rgba(201,168,76,.45)' : '1px solid transparent'}}>
-                            <span style={{fontSize:9,transform:fExp?'rotate(90deg)':'none',display:'inline-block',transition:'.15s',flexShrink:0}}>▶</span>
-                            <span style={{flexShrink:0}}>📁</span>
-                            <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.name}</span>
-                            <span style={{fontSize:9,background:'rgba(255,255,255,.08)',padding:'1px 5px',borderRadius:7,flexShrink:0}}>{fProjects.length}</span>
-                            <button onClick={e=>{e.stopPropagation(); openQuickForm(c, f.id)}} title="Add project in this folder"
-                              style={{background:'none',border:'none',color:'rgba(201,168,76,.7)',cursor:'pointer',fontSize:13,padding:'0 2px',lineHeight:1}}>＋</button>
-                            <button onClick={e=>{e.stopPropagation(); renameFolder(f)}} title="Rename folder"
-                              style={{background:'none',border:'none',color:'rgba(255,255,255,.35)',cursor:'pointer',fontSize:11,padding:'0 2px',lineHeight:1}}>✎</button>
-                            <button onClick={e=>{e.stopPropagation(); deleteFolder(f)}} title="Delete folder"
-                              style={{background:'none',border:'none',color:'rgba(239,68,68,.5)',cursor:'pointer',fontSize:11,padding:'0 2px',lineHeight:1}}>✕</button>
-                          </div>
-                          {fExp && (
-                            <div style={{paddingLeft:16}}>
-                              {fProjects.map((p:any)=>projRow(p))}
-                              {qf.open && qf.folderId===f.id
-                                ? quickFormBox(c, qf)
-                                : (
-                                <button onClick={()=>openQuickForm(c, f.id)}
-                                  style={{background:'none',border:'none',color:'rgba(201,168,76,.5)',fontSize:11,padding:'3px 8px',cursor:'pointer',fontFamily:'Inter,sans-serif',textAlign:'left'}}>
-                                  ＋ Add project here
-                                </button>
-                              )}
-                              {!fProjects.length && <div style={{fontSize:10,color:'#9AA5B4',padding:'0 8px 3px'}}>Empty — drag a project here or use ＋ above</div>}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-
-                    {/* ── UNFILED (drop here to remove from folder) ── */}
-                    <div
-                      onDragOver={e=>e.preventDefault()}
-                      onDrop={e=>{ e.preventDefault(); if (dragProj) moveProject(dragProj, null) }}
-                      style={ dragProj ? {border:'1px dashed rgba(255,255,255,.25)',borderRadius:5,padding:2,marginTop:2} : {} }>
-                      {custFolders.length>0 && unfiled.length>0 && (
-                        <div style={{fontSize:9,color:'#9AA5B4',textTransform:'uppercase',letterSpacing:1,padding:'4px 8px'}}>Unfiled</div>
-                      )}
-                      {dragProj && custFolders.length>0 && unfiled.length===0 && (
-                        <div style={{fontSize:10,color:'#9AA5B4',padding:'3px 8px'}}>Drop here to unfile</div>
-                      )}
-                      {unfiled.map((p:any)=>projRow(p))}
-                    </div>
-
-                    {!c.projects?.length && !qf.open && !custFolders.length && (
+                    {c.projects?.map((p:any)=>(
+                      <div key={p.id} style={{display:'flex',alignItems:'center',gap:6,padding:'7px 10px',borderRadius:5,fontSize:13,marginBottom:2}}>
+                        <span onClick={()=>router.push(`/admin/project/${p.id}`)} style={{display:'flex',alignItems:'center',gap:5,flex:1,cursor:'pointer',color:'rgba(255,255,255,.5)'}}>
+                          <span style={{fontSize:13,flexShrink:0}}>📋</span>
+                          <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
+                          <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:6,background:'rgba(255,255,255,.08)',color:statusColor[p.status]||'#E8C96B',flexShrink:0}}>{p.status}</span>
+                        </span>
+                        <button onClick={e=>deleteProject(p.id, p.name, e)} title="Delete project"
+                          style={{background:'none',border:'none',color:'rgba(239,68,68,.5)',cursor:'pointer',fontSize:12,padding:'2px 4px',flexShrink:0,lineHeight:1}}>✕</button>
+                      </div>
+                    ))}
+                    {!c.projects?.length && !qf.open && (
                       <div style={{fontSize:11,color:'#9AA5B4',padding:'5px 10px'}}>No projects yet</div>
                     )}
-                    {qf.open && !qf.folderId ? quickFormBox(c, qf) : null}
-                    {!qf.open && (
-                      <button onClick={()=>openQuickForm(c, null)}
+                    {qf.open ? (
+                      <div style={{margin:'6px 4px 8px',padding:'10px',background:'rgba(201,168,76,.08)',borderRadius:7,border:'1px solid rgba(201,168,76,.2)'}}>
+                        <div style={{fontSize:11,fontWeight:700,color:'#C9A84C',marginBottom:8}}>New Project</div>
+                        <input autoFocus placeholder="Project name *" value={qf.name}
+                          onChange={e=>setQuickForm(p=>({...p,[c.id]:{...qf,name:e.target.value}}))}
+                          onKeyDown={e=>{ if(e.key==='Enter') quickCreate(c.id,c.email) }}
+                          style={{width:'100%',padding:'5px 7px',border:'1px solid rgba(201,168,76,.3)',borderRadius:4,fontSize:12,background:'#2a2a2a',color:'#fff',marginBottom:5,outline:'none',boxSizing:'border-box'}}/>
+                        <input placeholder={`Email (${c.email})`} value={qf.email}
+                          onChange={e=>setQuickForm(p=>({...p,[c.id]:{...qf,email:e.target.value}}))}
+                          style={{width:'100%',padding:'5px 7px',border:'1px solid rgba(255,255,255,.1)',borderRadius:4,fontSize:12,background:'#2a2a2a',color:'#fff',marginBottom:5,outline:'none',boxSizing:'border-box'}}/>
+                        <input placeholder="Address" value={qf.addr}
+                          onChange={e=>setQuickForm(p=>({...p,[c.id]:{...qf,addr:e.target.value}}))}
+                          style={{width:'100%',padding:'5px 7px',border:'1px solid rgba(255,255,255,.1)',borderRadius:4,fontSize:12,background:'#2a2a2a',color:'#fff',marginBottom:7,outline:'none',boxSizing:'border-box'}}/>
+                        <div style={{display:'flex',gap:5}}>
+                          <button onClick={()=>quickCreate(c.id,c.email)} disabled={saving===c.id}
+                            style={{flex:1,background:'#C9A84C',color:'#1C1C1E',border:'none',padding:'6px',borderRadius:5,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                            {saving===c.id?'Creating…':'✓ Create'}
+                          </button>
+                          <button onClick={()=>setQuickForm(p=>({...p,[c.id]:{...qf,open:false}}))}
+                            style={{background:'transparent',color:'#9AA5B4',border:'1px solid rgba(255,255,255,.1)',padding:'6px 10px',borderRadius:5,fontSize:11,cursor:'pointer'}}>✕</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button onClick={()=>setQuickForm(p=>({...p,[c.id]:{open:true,name:'',email:c.email,addr:'',phone:c.phone||''}}))}
                         style={{background:'none',border:'none',color:'rgba(201,168,76,.5)',fontSize:11,padding:'4px 8px',cursor:'pointer',fontFamily:'Inter,sans-serif',textAlign:'left'}}>
                         ＋ Add project
                       </button>
@@ -357,17 +214,14 @@ export default function ProjectHome() {
                     </summary>
                     {mainExpanded[c.id] && (
                       <div style={{padding:'0 16px 16px 44px',background:'#FAFAFA'}}>
-                        {c.projects?.map((p:any)=>{
-                          const fld = folders.find((f:any)=>f.id===projFolderMap[p.id])
-                          return (
+                        {c.projects?.map((p:any)=>(
                           <div key={p.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px dashed #E2DDD6',fontSize:12}}>
                             <span>📋</span>
-                            <span style={{flex:1,fontWeight:500}}>{p.name}{fld && <span style={{marginLeft:8,fontSize:10,color:'#9AA5B4'}}>📁 {fld.name}</span>}</span>
+                            <span style={{flex:1,fontWeight:500}}>{p.name}</span>
                             <span style={{fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:8,background:'rgba(201,168,76,.2)',color:'#8B6914'}}>{p.status}</span>
-                            <button onClick={()=>exportExcel(p.id)} style={{background:'#0D9488',color:'#fff',border:'none',padding:'3px 10px',borderRadius:5,fontSize:11,cursor:'pointer'}}>⬇ Excel</button>
                             <button onClick={()=>router.push(`/admin/project/${p.id}`)} style={{background:'#1C1C1E',color:'#fff',border:'none',padding:'3px 10px',borderRadius:5,fontSize:11,cursor:'pointer'}}>Open →</button>
                           </div>
-                        )})}
+                        ))}
                         <div style={{marginTop:12,padding:12,background:'#fff',borderRadius:7,border:'1px solid #E2DDD6'}}>
                           <div style={{fontSize:11,fontWeight:700,color:'#4A5568',marginBottom:8}}>＋ Add Project</div>
                           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
