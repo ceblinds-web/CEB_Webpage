@@ -28,17 +28,6 @@ export default function CustomerProjectSidebar({ activeProjectId, refreshKey = 0
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [folderExpanded, setFolderExpanded] = useState<Record<string, boolean>>({})
   const [dragProj, setDragProj] = useState<string | null>(null)
-  const [dragOverProj, setDragOverProj] = useState<string | null>(null)
-  const [orderMap, setOrderMap] = useState<Record<string, number>>({})
-  const [sortMode, setSortModeState] = useState<'manual' | 'alpha'>('manual')
-  useEffect(() => {
-    try { const s = localStorage.getItem('ceb-sidebar-sort'); if (s === 'alpha' || s === 'manual') setSortModeState(s) } catch {}
-  }, [])
-  const setSortMode = (m: 'manual' | 'alpha') => { setSortModeState(m); try { localStorage.setItem('ceb-sidebar-sort', m) } catch {} }
-  const sortProjects = (list: any[]) => [...list].sort((a, b) =>
-    sortMode === 'alpha'
-      ? String(a.name).localeCompare(String(b.name))
-      : ((orderMap[a.id] ?? 0) - (orderMap[b.id] ?? 0)) || String(a.name).localeCompare(String(b.name)))
   const [quickForm, setQuickForm] = useState<Record<string, QF>>({})
   const [saving, setSaving] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
@@ -67,7 +56,6 @@ export default function CustomerProjectSidebar({ activeProjectId, refreshKey = 0
     if (!d?.folders) return
     setFolders(d.folders)
     setProjFolderMap(d.mapping || {})
-    setOrderMap(d.orders || {})
     if (activeProjectId && d.mapping?.[activeProjectId]) {
       setFolderExpanded(prev => ({ ...prev, [d.mapping[activeProjectId]]: true }))
     }
@@ -109,30 +97,6 @@ export default function CustomerProjectSidebar({ activeProjectId, refreshKey = 0
     const res = await fetch('/api/folders/move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_id: projId, folder_id: folderId }) })
     if (!res.ok) { showToast('Move failed', 'err'); return }
     await changed(); showToast(folderId ? 'Moved to folder' : 'Moved to Unfiled')
-  }
-
-  const reorderTo = async (dragId: string, target: any, c: any, targetFolderId: string | null) => {
-    setDragProj(null); setDragOverProj(null)
-    if (sortMode === 'alpha') { showToast('Switch to ☰ Manual sort to rearrange', 'err'); return }
-    const draggedFolder = projFolderMap[dragId] || null
-    if (draggedFolder !== (targetFolderId || null)) {
-      const mv = await fetch('/api/folders/move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_id: dragId, folder_id: targetFolderId }) })
-      if (!mv.ok) { showToast('Move failed', 'err'); return }
-    }
-    const custProjects = c.projects || []
-    const containers: (string | null)[] = [ ...(foldersByCust[c.id] || []).map((f: any) => f.id), null ]
-    const ordered: string[] = []
-    for (const fid of containers) {
-      const list = sortProjects(custProjects.filter((p: any) => (projFolderMap[p.id] || null) === (fid || null) && p.id !== dragId))
-      if ((fid || null) === (targetFolderId || null)) {
-        const ti = list.findIndex((x: any) => x.id === target.id)
-        list.splice(ti < 0 ? list.length : ti, 0, { id: dragId })
-      }
-      ordered.push(...list.map((x: any) => x.id))
-    }
-    const res = await fetch('/api/projects/reorder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ordered }) })
-    if (!res.ok) { const d = await res.json().catch(() => ({})); showToast(d.error || 'Reorder failed', 'err'); return }
-    await changed(); showToast('Reordered')
   }
 
   // ── project ops ──
@@ -201,24 +165,20 @@ export default function CustomerProjectSidebar({ activeProjectId, refreshKey = 0
     } catch (err: any) { showToast('Network error: ' + err.message, 'err') } finally { setNewCustBusy(false) }
   }
 
-  const projRow = (p: any, c: any, containerFolderId: string | null) => {
+  const projRow = (p: any) => {
     const isActive = p.id === activeProjectId
     return (
       <div key={p.id}
         draggable
         onDragStart={() => setDragProj(p.id)}
-        onDragEnd={() => { setDragProj(null); setDragOverProj(null) }}
-        onDragOver={e => { if (dragProj && dragProj !== p.id) { e.preventDefault(); e.stopPropagation(); setDragOverProj(p.id) } }}
-        onDragLeave={() => setDragOverProj(prev => (prev === p.id ? null : prev))}
-        onDrop={e => { e.preventDefault(); e.stopPropagation(); if (dragProj && dragProj !== p.id) reorderTo(dragProj, p, c, containerFolderId) }}
-        title={`${p.name} — drag onto a project to reorder, onto a folder to move`}
+        onDragEnd={() => setDragProj(null)}
+        title="Drag onto a folder to move"
         style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px', borderRadius: 5, fontSize: 13, marginBottom: 2,
           background: isActive ? 'rgba(201,168,76,.15)' : 'transparent',
-          boxShadow: dragOverProj === p.id ? 'inset 0 2px 0 #C9A84C' : undefined,
           opacity: dragProj === p.id ? .45 : 1, cursor: 'grab' }}>
         <span onClick={() => router.push(`/admin/project/${p.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, cursor: 'pointer', color: isActive ? '#C9A84C' : 'rgba(255,255,255,.55)', minWidth: 0 }}>
           <span style={{ fontSize: 13, flexShrink: 0 }}>📋</span>
-          <span title={p.name} style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
           <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 6, background: 'rgba(255,255,255,.08)', color: STATUS_COLOR[p.status] || '#E8C96B', flexShrink: 0 }}>{p.status}</span>
         </span>
         <button onClick={e => duplicateProject(p, e)} title="Copy project"
@@ -262,14 +222,7 @@ export default function CustomerProjectSidebar({ activeProjectId, refreshKey = 0
 
   return (
     <div style={{ padding: '10px 12px 0' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', color: '#9AA5B4' }}>Customers</span>
-        <button onClick={() => setSortMode(sortMode === 'alpha' ? 'manual' : 'alpha')}
-          title={sortMode === 'alpha' ? 'Sorted A–Z — click for manual order (drag to rearrange)' : 'Manual order (drag to rearrange) — click for A–Z'}
-          style={{ background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.12)', color: '#9AA5B4', fontSize: 10, padding: '2px 8px', borderRadius: 5, cursor: 'pointer' }}>
-          {sortMode === 'alpha' ? '🔤 A–Z' : '☰ Manual'}
-        </button>
-      </div>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', color: '#9AA5B4', marginBottom: 9 }}>Customers</div>
       {customers.map(c => {
         const isExp = !!expanded[c.id]
         const qf = quickForm[c.id] || { open: false, name: '', email: '', addr: '', phone: '', folderId: null }
@@ -319,7 +272,7 @@ export default function CustomerProjectSidebar({ activeProjectId, refreshKey = 0
                       </div>
                       {fExp && (
                         <div style={{ paddingLeft: 16 }}>
-                          {sortProjects(fProjects).map((p: any) => projRow(p, c, f.id))}
+                          {fProjects.map((p: any) => projRow(p))}
                           {qf.open && qf.folderId === f.id
                             ? quickFormBox(c, qf)
                             : (
@@ -345,7 +298,7 @@ export default function CustomerProjectSidebar({ activeProjectId, refreshKey = 0
                   {dragProj && custFolders.length > 0 && unfiled.length === 0 && (
                     <div style={{ fontSize: 10, color: '#9AA5B4', padding: '3px 8px' }}>Drop here to unfile</div>
                   )}
-                  {sortProjects(unfiled).map((p: any) => projRow(p, c, null))}
+                  {unfiled.map((p: any) => projRow(p))}
                 </div>
 
                 {!c.projects?.length && !qf.open && !custFolders.length && (

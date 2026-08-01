@@ -996,9 +996,6 @@ export default function AdminProjectPage() {
                 )}
               </span>
               <span style={{width:1,height:20,background:'#E2DDD6',margin:'0 4px'}}/>
-              <button onClick={()=>{window.location.href=`/api/projects/${id}/export`}} title="Download this project as Excel" style={{display:'flex',alignItems:'center',gap:3,padding:'5px 9px',border:'1px solid #0D9488',background:'#CCFBF1',color:'#0D9488',borderRadius:5,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>⬇ Excel</button>
-              <button onClick={sendEmail} disabled={sendingEmail} title="Email this quote to the customer" style={{display:'flex',alignItems:'center',gap:3,padding:'5px 9px',border:'none',background:'#0D9488',color:'#fff',borderRadius:5,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>{sendingEmail?'Sending…':'✉ Email Quote'}</button>
-              <span style={{width:1,height:20,background:'#E2DDD6',margin:'0 4px'}}/>
               <button onClick={doPush} disabled={pushing} style={{display:'flex',alignItems:'center',gap:3,padding:'5px 9px',border:'none',background:'#27AE60',color:'#fff',borderRadius:5,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>{pushing?'Pushing…':'⬆ Push to Customer'}</button>
               <span style={{marginLeft:'auto',fontSize:11,color:'#8B6914',background:'#F7F4EF',border:'1px solid #E2DDD6',borderRadius:4,padding:'3px 10px',whiteSpace:'nowrap'}}>Total: <strong>{fmt(grand)}</strong></span>
             </div>

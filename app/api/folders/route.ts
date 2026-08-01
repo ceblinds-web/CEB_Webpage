@@ -11,10 +11,23 @@ export async function GET() {
   const supabase = createAdminClient()
   const { data: folders, error } = await supabase.from('folders').select('*').order('created_at')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  const { data: projs } = await supabase.from('projects').select('id,folder_id').not('folder_id', 'is', null)
+
+  // Try to include sort_order; fall back gracefully if migration 018 not run yet
+  let projs: any[] | null = null
+  const withOrder = await supabase.from('projects').select('id,folder_id,sort_order')
+  if (!withOrder.error) projs = withOrder.data
+  else {
+    const basic = await supabase.from('projects').select('id,folder_id')
+    projs = basic.data || []
+  }
+
   const mapping: Record<string, string> = {}
-  ;(projs || []).forEach((p: any) => { mapping[p.id] = p.folder_id })
-  return NextResponse.json({ folders: folders || [], mapping })
+  const orders: Record<string, number> = {}
+  ;(projs || []).forEach((p: any) => {
+    if (p.folder_id) mapping[p.id] = p.folder_id
+    if (typeof p.sort_order === 'number') orders[p.id] = p.sort_order
+  })
+  return NextResponse.json({ folders: folders || [], mapping, orders })
 }
 
 export async function POST(req: Request) {
