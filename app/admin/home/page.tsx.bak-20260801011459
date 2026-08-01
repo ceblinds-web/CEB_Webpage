@@ -83,15 +83,6 @@ export default function ProjectHome() {
     e?.stopPropagation?.()
     window.location.href = `/api/projects/${projId}/export`
   }
-  const duplicateProject = async (p: any, e?: any) => {
-    e?.stopPropagation?.()
-    const name = prompt('Name for the copy:', `${p.name} (Copy)`)
-    if (!name?.trim()) return
-    const res = await fetch(`/api/projects/${p.id}/duplicate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name.trim()})})
-    if (!res.ok) { const d = await res.json().catch(()=>({})); showToast(d.error||'Copy failed','err'); return }
-    await load(); await loadFolders()
-    showToast('Project copied')
-  }
 
   const openQuickForm = (c:any, folderId: string|null) => {
     setExpanded(p=>({...p,[c.id]:true}))
@@ -181,8 +172,6 @@ export default function ProjectHome() {
         <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
         <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:6,background:'rgba(255,255,255,.08)',color:statusColor[p.status]||'#E8C96B',flexShrink:0}}>{p.status}</span>
       </span>
-      <button onClick={e=>duplicateProject(p, e)} title="Copy project"
-        style={{background:'none',border:'none',color:'rgba(216,180,254,.7)',cursor:'pointer',fontSize:12,padding:'2px 3px',flexShrink:0,lineHeight:1}}>⧉</button>
       <button onClick={e=>exportExcel(p.id, e)} title="Download Excel"
         style={{background:'none',border:'none',color:'rgba(94,234,212,.7)',cursor:'pointer',fontSize:12,padding:'2px 3px',flexShrink:0,lineHeight:1}}>⬇</button>
       <button onClick={e=>deleteProject(p.id, p.name, e)} title="Delete project"
@@ -375,7 +364,6 @@ export default function ProjectHome() {
                             <span>📋</span>
                             <span style={{flex:1,fontWeight:500}}>{p.name}{fld && <span style={{marginLeft:8,fontSize:10,color:'#9AA5B4'}}>📁 {fld.name}</span>}</span>
                             <span style={{fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:8,background:'rgba(201,168,76,.2)',color:'#8B6914'}}>{p.status}</span>
-                            <button onClick={()=>duplicateProject(p)} style={{background:'#7C3AED',color:'#fff',border:'none',padding:'3px 10px',borderRadius:5,fontSize:11,cursor:'pointer'}}>⧉ Copy</button>
                             <button onClick={()=>exportExcel(p.id)} style={{background:'#0D9488',color:'#fff',border:'none',padding:'3px 10px',borderRadius:5,fontSize:11,cursor:'pointer'}}>⬇ Excel</button>
                             <button onClick={()=>router.push(`/admin/project/${p.id}`)} style={{background:'#1C1C1E',color:'#fff',border:'none',padding:'3px 10px',borderRadius:5,fontSize:11,cursor:'pointer'}}>Open →</button>
                           </div>
