@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import CustomerProjectSidebar from '@/components/CustomerProjectSidebar'
 
 const CONV = 0.00064516
 const MOUNTS = ['Inside','Outside']
@@ -14,7 +13,6 @@ const SIDEBAR_STATUS_COLOR: Record<string,string> = {
   draft:'#E8C96B', sent:'#93C5FD', viewed:'#D8B4FE', confirmed:'#5EEAD4', invoiced:'#FCD34D', completed:'#6EE7A0', cancelled:'#FCA5A5'
 }
 const OPTIONAL_COLS = [
-  { key:'motors', label:'Motors $ column' },
   { key:'fabric', label:'Fabric' },
   { key:'valance', label:'Valance' },
   { key:'bottom_rail', label:'Bottom Rail' },
@@ -92,7 +90,7 @@ export default function AdminProjectPage() {
   const [newProjName, setNewProjName] = useState('')
   const [newProjEmail, setNewProjEmail] = useState('')
   const [newProjAddress, setNewProjAddress] = useState('')
-  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set(['motors']))
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set())
   const [showColsMenu, setShowColsMenu] = useState(false)
   const [accepting, setAccepting] = useState(false)
   const [showNewCustomer, setShowNewCustomer] = useState(false)
@@ -914,7 +912,68 @@ export default function AdminProjectPage() {
       <div style={{display:'flex',flex:1,overflow:'hidden'}}>
         {/* SIDEBAR */}
         <aside style={{width:256,background:'#1C1C1E',display:'flex',flexDirection:'column',flexShrink:0,overflowY:'auto'}}>
-          <CustomerProjectSidebar activeProjectId={id as string} />
+          <div style={{padding:'14px 12px 6px'}}>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:'1.2px',textTransform:'uppercase',color:'#9AA5B4',marginBottom:9}}>Customers</div>
+            {customers.map(c=>{
+              const isExp = !!expandedCust[c.id]
+              return (
+                <div key={c.id} style={{marginBottom:2}}>
+                  <div onClick={()=>setExpandedCust(prev=>({...prev,[c.id]:!prev[c.id]}))}
+                    className="sidebar-cust-row"
+                    style={{display:'flex',alignItems:'center',gap:7,padding:'8px 10px',borderRadius:6,cursor:'pointer',color:'rgba(255,255,255,.65)',fontSize:14}}>
+                    <span style={{fontSize:11,color:'#9AA5B4',transform:isExp?'rotate(90deg)':'none',display:'inline-block',transition:'.15s',flexShrink:0}}>▶</span>
+                    <span style={{fontSize:14}}>👤</span>
+                    <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontWeight:500}}>{c.name}</span>
+                    <span style={{fontSize:10,background:'rgba(255,255,255,.1)',color:'#9AA5B4',padding:'2px 6px',borderRadius:8,flexShrink:0}}>{c.projects?.length||0}</span>
+                    <button onClick={e=>{e.stopPropagation();openAddProjectForm(c.id)}} title="Add project"
+                      style={{background:'none',border:'none',color:'#C9A84C',cursor:'pointer',fontSize:15,padding:'0 3px',flexShrink:0}}>＋</button>
+                    <button onClick={e=>{e.stopPropagation();confirmOrAsk('cust:'+c.id,()=>deleteCustomerFromSidebar(c.id,e))}} title="Delete customer"
+                      style={{background:pendingDelete==='cust:'+c.id?'#E53E3E':'none',border:'none',color:pendingDelete==='cust:'+c.id?'#fff':'#E53E3E',cursor:'pointer',fontSize:pendingDelete==='cust:'+c.id?10:13,fontWeight:pendingDelete==='cust:'+c.id?700:400,padding:pendingDelete==='cust:'+c.id?'2px 6px':'0 3px',borderRadius:4,opacity:1,flexShrink:0,whiteSpace:'nowrap'}}>{pendingDelete==='cust:'+c.id?'Confirm?':'✕'}</button>
+                  </div>
+                  {isExp && (
+                    <div style={{paddingLeft:18}}>
+                      {c.projects?.map((p:any)=>(
+                        <div key={p.id} onClick={()=>router.push(`/admin/project/${p.id}`)}
+                          className="sidebar-proj-row"
+                          style={{display:'flex',alignItems:'center',gap:6,padding:'7px 10px',borderRadius:5,cursor:'pointer',
+                            color: p.id===id ? '#C9A84C' : 'rgba(255,255,255,.55)',
+                            background: p.id===id ? 'rgba(201,168,76,.15)' : 'transparent',
+                            fontSize:13,marginBottom:2}}>
+                          <span style={{fontSize:13}}>📋</span>
+                          <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
+                          <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:7,background:'rgba(255,255,255,.08)',color:SIDEBAR_STATUS_COLOR[p.status]||'#E8C96B',flexShrink:0}}>{p.status}</span>
+                          <button onClick={e=>{e.stopPropagation();confirmOrAsk('proj:'+p.id,()=>deleteProjectFromSidebar(p.id,c.id,e))}} title="Delete project"
+                            style={{background:pendingDelete==='proj:'+p.id?'#E53E3E':'none',border:'none',color:pendingDelete==='proj:'+p.id?'#fff':'#E53E3E',cursor:'pointer',fontSize:pendingDelete==='proj:'+p.id?9:12,fontWeight:pendingDelete==='proj:'+p.id?700:400,padding:pendingDelete==='proj:'+p.id?'1px 5px':'0 2px',borderRadius:4,opacity:1,flexShrink:0,whiteSpace:'nowrap'}}>{pendingDelete==='proj:'+p.id?'Confirm?':'✕'}</button>
+                        </div>
+                      ))}
+                      {!c.projects?.length && <div style={{padding:'5px 10px',fontSize:11,color:'#9AA5B4'}}>No projects</div>}
+                      {addingProjectFor===c.id ? (
+                        <div style={{background:'rgba(201,168,76,.08)',border:'1px dashed rgba(201,168,76,.4)',borderRadius:6,padding:8,margin:'4px 0'}}>
+                          <input value={newProjName} onChange={e=>setNewProjName(e.target.value)} placeholder="Project name" autoFocus
+                            style={{width:'100%',padding:'5px 7px',border:'1px solid rgba(255,255,255,.2)',borderRadius:4,fontSize:12,marginBottom:5,background:'rgba(255,255,255,.05)',color:'#fff'}}/>
+                          <input value={newProjEmail} onChange={e=>setNewProjEmail(e.target.value)} placeholder="Project email"
+                            style={{width:'100%',padding:'5px 7px',border:'1px solid rgba(255,255,255,.2)',borderRadius:4,fontSize:12,marginBottom:5,background:'rgba(255,255,255,.05)',color:'#fff'}}/>
+                          <input value={newProjAddress} onChange={e=>setNewProjAddress(e.target.value)} placeholder="Mailing address"
+                            style={{width:'100%',padding:'5px 7px',border:'1px solid rgba(255,255,255,.2)',borderRadius:4,fontSize:12,marginBottom:6,background:'rgba(255,255,255,.05)',color:'#fff'}}/>
+                          <div style={{display:'flex',gap:6}}>
+                            <button onClick={()=>createProjectFor(c.id)} style={{background:'#C9A84C',color:'#1C1C1E',border:'none',padding:'5px 10px',borderRadius:4,fontSize:11,fontWeight:700,cursor:'pointer'}}>Create</button>
+                            <button onClick={()=>setAddingProjectFor(null)} style={{background:'none',border:'1px solid rgba(255,255,255,.2)',color:'rgba(255,255,255,.6)',padding:'5px 10px',borderRadius:4,fontSize:11,cursor:'pointer'}}>Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button onClick={()=>openAddProjectForm(c.id)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 10px',background:'none',border:'none',color:'rgba(201,168,76,.6)',fontSize:12,cursor:'pointer',fontFamily:'Inter,sans-serif'}}>＋ Add project</button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+            {!customers.length && <div style={{fontSize:12,color:'#9AA5B4',padding:'4px 0'}}>No customers yet</div>}
+          </div>
+          <button onClick={()=>setShowNewCustomer(true)}
+            style={{margin:'4px 12px 10px',background:'rgba(201,168,76,.1)',border:'1px dashed rgba(201,168,76,.3)',color:'#C9A84C',padding:8,borderRadius:7,fontSize:12,cursor:'pointer',fontFamily:'Inter,sans-serif'}}>
+            ＋ New Customer
+          </button>
           <hr style={{border:'none',borderTop:'1px solid rgba(255,255,255,.06)',margin:'5px 12px'}}/>
           <div style={{margin:'0 12px 10px',padding:'8px 10px',borderRadius:6,fontSize:10,lineHeight:1.6, background: isPushed?'rgba(39,174,96,.12)':'rgba(245,158,11,.12)', color: isPushed?'#6EE7A0':'#FCD34D', border: `1px solid ${isPushed?'rgba(39,174,96,.2)':'rgba(245,158,11,.2)'}`}}>
             {isPushed ? '✓ Pushed — customer view up to date' : '⚠ Unpushed changes'}
@@ -929,7 +988,7 @@ export default function AdminProjectPage() {
           <hr style={{border:'none',borderTop:'1px solid rgba(255,255,255,.06)',margin:'5px 12px'}}/>
           <div style={{padding:'10px 12px'}}>
             <div style={{fontSize:10,fontWeight:700,letterSpacing:'1.2px',textTransform:'uppercase',color:'#9AA5B4',marginBottom:7}}>Project Totals</div>
-            {[['Items',dataRows.length.toString()],['Blinds & Motors',fmt((totB+totM)*(1-config.discount_pct/100))],
+            {[['Items',dataRows.length.toString()],['Blinds',fmt(totB*(1-config.discount_pct/100))],['Motors',fmt(totM*(1-config.discount_pct/100))],
               ...(config.discount_pct>0?[['Discount','-'+fmt((totB+totM)*config.discount_pct/100)]]:[]),
               [`Tax (${config.tax_pct}%)`,fmt(tax)],['Shipping',fmt(ship)],['Installation',fmt(config.installation)],
               ...fees.map(f=>[f.label,fmt(f.fee_type==='pct'?sub*(f.value/100):f.value)])
@@ -1021,7 +1080,7 @@ export default function AdminProjectPage() {
                     <th style={th}>Sq.M</th>
                     {colVisible('remark') && <th style={thCust}>Remarks ✏</th>}
                     <th style={th}>Blinds $</th>
-                    {colVisible('motors') && <th style={th}>Motors $</th>}
+                    <th style={th}>Motors $</th>
                     <th style={th}>Line Total</th>
                     <th style={{...th,width:34,textAlign:'center'}}></th>
                   </tr>
@@ -1093,7 +1152,7 @@ export default function AdminProjectPage() {
                         <td style={td}><div style={cv}>{sq>0?sq.toFixed(2):'—'}</div></td>
                         {colVisible('remark') && <td style={{...td,background:'rgba(39,174,96,.03)'}}>{txt_('remark',r.remark,true)}</td>}
                         <td style={td}><div style={{...cv,fontWeight:500}}>{bq>0?fmt(bq):'—'}</div></td>
-                        {colVisible('motors') && <td style={td}><div style={{...cv,fontWeight:500}}>{mq>0?fmt(mq):'—'}</div></td>}
+                        <td style={td}><div style={{...cv,fontWeight:500}}>{mq>0?fmt(mq):'—'}</div></td>
                         <td style={td}><div style={{...cv,color:'#8B6914',fontWeight:700}}>{lt>0?fmt(lt):'—'}</div></td>
                         <td style={{...td,textAlign:'center',borderRight:'none',whiteSpace:'nowrap'}}>
                           <button tabIndex={-1} onClick={ev=>{ev.stopPropagation(); delRowById(r.id)}} title="Delete this row"
@@ -1112,23 +1171,21 @@ export default function AdminProjectPage() {
                     <td style={{padding:'6px',fontWeight:700,color:'#8B6914',fontSize:13}} title="Sum of each row's Sq.M × Qty">{totSqm.toFixed(2)}</td>
                     {colVisible('remark') && <td></td>}
                     <td style={{padding:'6px',fontWeight:700,color:'#8B6914',fontSize:13}}>{fmt(totB*(1-config.discount_pct/100))}</td>
-                    {colVisible('motors') && <td style={{padding:'6px',fontWeight:700,color:'#8B6914',fontSize:13}}>{fmt(totM*(1-config.discount_pct/100))}</td>}
+                    <td style={{padding:'6px',fontWeight:700,color:'#8B6914',fontSize:13}}>{fmt(totM*(1-config.discount_pct/100))}</td>
                     <td style={{padding:'6px',fontWeight:700,color:'#8B6914',fontSize:13}}>{fmt(sub)}</td>
                     <td></td>
                   </tr>
                 </tfoot>
               </table>
               <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:20,padding:'16px 20px',background:'#FFFBF0',borderTop:'3px solid #E8C96B',flexWrap:'wrap'}}>
-                <span style={{fontSize:13,color:'#4A5568'}}>Blinds &amp; Motors <strong style={{color:'#1C1C1E',fontWeight:700}}>{fmt((totB+totM)*(1-config.discount_pct/100))}</strong></span>
+                <span style={{fontSize:13,color:'#4A5568'}}>Blinds <strong style={{color:'#1C1C1E',fontWeight:700}}>{fmt(totB*(1-config.discount_pct/100))}</strong></span>
+                <span style={{fontSize:13,color:'#4A5568'}}>Motors <strong style={{color:'#1C1C1E',fontWeight:700}}>{fmt(totM*(1-config.discount_pct/100))}</strong></span>
                 {config.discount_pct>0 && <span style={{fontSize:13,color:'#27AE60',fontWeight:600}}>Discount ({config.discount_pct}%) <strong>-{fmt((totB+totM)*config.discount_pct/100)}</strong></span>}
                 <span style={{fontSize:13,color:'#4A5568'}}>Tax <strong style={{color:'#1C1C1E',fontWeight:700}}>{fmt(tax)}</strong></span>
                 <span style={{fontSize:13,color:'#4A5568'}}>Shipping <strong style={{color:'#1C1C1E',fontWeight:700}}>{fmt(ship)}</strong></span>
-                <span style={{width:2,height:24,background:'#E8C96B'}}/>
-                <span style={{fontSize:19,color:'#B8860B',fontWeight:800}}>Project Total: {fmt(grand-config.installation)}</span>
-              </div>
-              <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:10,padding:'4px 20px 14px',background:'#FFFBF0'}}>
                 <span style={{fontSize:13,color:'#4A5568'}}>Installation <strong style={{color:'#1C1C1E',fontWeight:700}}>{fmt(config.installation)}</strong></span>
-                <span style={{fontSize:12,color:'#9AA5B4'}}>Grand Total incl. installation: <strong style={{color:'#8B6914'}}>{fmt(grand)}</strong></span>
+                <span style={{width:2,height:24,background:'#E8C96B'}}/>
+                <span style={{fontSize:19,color:'#B8860B',fontWeight:800}}>Project Total: {fmt(grand)}</span>
               </div>
             </div>
             <div style={{height:26,background:'#1C1C1E',display:'flex',alignItems:'center',padding:'0 14px',gap:16,flexShrink:0}}>
