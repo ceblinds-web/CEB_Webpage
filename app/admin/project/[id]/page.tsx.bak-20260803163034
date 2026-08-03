@@ -407,7 +407,7 @@ export default function AdminProjectPage() {
       location: r.location||null, fabric: r.fabric||null,
       valance: r.valance||null, bottom_rail: r.bottom_rail||null,
       mount: r.mount||null, width_in: r.width_in||null, height_in: r.height_in||null,
-      qty: r.qty||1, remark: r.remark||null, priced: r.priced !== false
+      qty: r.qty||1, remark: r.remark||null
     }))
     try {
       const res = await fetch('/api/push', { method:'POST', headers:{'Content-Type':'application/json'},
@@ -427,75 +427,6 @@ export default function AdminProjectPage() {
     } finally {
       setPushing(false)
     }
-  }
-
-  const [savingDraft, setSavingDraft] = useState(false)
-  const doSave = async () => {
-    setSavingDraft(true)
-    const toSave = rows.map(r=>({
-      is_section: r.is_section, section_name: r.section_name||null,
-      blind_type: r.blind_type||null, control: r.control||null,
-      location: r.location||null, fabric: r.fabric||null,
-      valance: r.valance||null, bottom_rail: r.bottom_rail||null,
-      mount: r.mount||null, width_in: r.width_in||null, height_in: r.height_in||null,
-      qty: r.qty||1, remark: r.remark||null, priced: r.priced !== false
-    }))
-    try {
-      const res = await fetch('/api/save', { method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ projectId:id, config, fees, rows:toSave }) })
-      const text = await res.text()
-      let data:any = {}
-      try { data = text?JSON.parse(text):{} } catch { showToast('Server returned an unexpected response. Status '+res.status,'err'); return }
-      if (!res.ok) { showToast(data.error||'Save failed','err'); return }
-      showToast('💾 Draft saved — customer quote & totals unchanged until you Push','ok')
-    } catch (err:any) { showToast('Network error saving: '+err.message,'err') }
-    finally { setSavingDraft(false) }
-  }
-
-  // ── PROJECT EXPENSES (per-project overhead, deducted from In-Pocket) ──
-  const PROJ_EXP_CATS = ['MATERIALS_HARDWARE','GAS_TRAVEL','LABOR_SUBCONTRACTOR','PERMITS_FEES','MISC']
-  const [projExpenses, setProjExpenses] = useState<any[]>([])
-  const [projExpCats, setProjExpCats] = useState<string[]>(PROJ_EXP_CATS)
-  const [projExpCat, setProjExpCat] = useState('MATERIALS_HARDWARE')
-  const [projExpCustomCat, setProjExpCustomCat] = useState(false)
-  const [projExpCustomVal, setProjExpCustomVal] = useState('')
-  const [projExpDesc, setProjExpDesc] = useState('')
-  const [projExpCost, setProjExpCost] = useState<number|''>('')
-  const [projExpDate, setProjExpDate] = useState(new Date().toISOString().slice(0,10))
-  const [projExpBusy, setProjExpBusy] = useState(false)
-  const [projExpDelConfirm, setProjExpDelConfirm] = useState<string|null>(null)
-  const loadProjExpenses = () => {
-    fetch(`/api/expenses?projectId=${id}`, { cache:'no-store' }).then(r=>r.json()).then(d=>{
-      if (Array.isArray(d)) {
-        setProjExpenses(d)
-        setProjExpCats(prev=>Array.from(new Set([...prev, ...d.map((e:any)=>e.category)])))
-      }
-    }).catch(()=>{})
-  }
-  useEffect(()=>{ loadProjExpenses() }, [id])
-  const projExpTotal = projExpenses.reduce((s,e)=>s+Number(e.cost||0),0)
-  const addProjExpense = async () => {
-    const category = projExpCustomCat ? projExpCustomVal.trim().toUpperCase().replace(/\s+/g,'_') : projExpCat
-    if (!category) return showToast('Category required','err')
-    if (!projExpDesc.trim() || !projExpCost) return showToast('Description and cost required','err')
-    setProjExpBusy(true)
-    try {
-      const res = await fetch('/api/expenses', { method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ category, description:projExpDesc, cost:projExpCost, expense_date:projExpDate, project_id:id }) })
-      const d = await res.json().catch(()=>({}))
-      if (!res.ok) { showToast(d.error||'Could not add expense','err'); return }
-      setProjExpDesc(''); setProjExpCost(''); setProjExpCustomCat(false); setProjExpCustomVal('')
-      loadProjExpenses()
-      showToast('Expense logged','ok')
-    } catch (err:any) { showToast(err.message,'err') } finally { setProjExpBusy(false) }
-  }
-  const deleteProjExpense = async (eid:string) => {
-    if (projExpDelConfirm!==eid) { setProjExpDelConfirm(eid); setTimeout(()=>setProjExpDelConfirm(p=>p===eid?null:p),3000); return }
-    setProjExpDelConfirm(null)
-    const res = await fetch(`/api/expenses/${eid}`, { method:'DELETE' })
-    if (!res.ok) { showToast('Could not delete','err'); return }
-    loadProjExpenses()
-    showToast('Expense deleted','ok')
   }
 
   const acceptOnBehalf = async () => {
@@ -1065,7 +996,6 @@ export default function AdminProjectPage() {
                 )}
               </span>
               <span style={{width:1,height:20,background:'#E2DDD6',margin:'0 4px'}}/>
-              <button onClick={doSave} disabled={savingDraft} title="Save draft — customer view stays on last pushed version" style={{display:'flex',alignItems:'center',gap:3,padding:'5px 9px',border:'none',background:'#1C1C1E',color:'#fff',borderRadius:5,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>{savingDraft?'Saving…':'💾 Save'}</button>
               <button onClick={()=>{window.location.href=`/api/projects/${id}/export`}} title="Download this project as Excel" style={{display:'flex',alignItems:'center',gap:3,padding:'5px 9px',border:'1px solid #0D9488',background:'#CCFBF1',color:'#0D9488',borderRadius:5,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>⬇ Excel</button>
               <button onClick={sendEmail} disabled={sendingEmail} title="Email this quote to the customer" style={{display:'flex',alignItems:'center',gap:3,padding:'5px 9px',border:'none',background:'#0D9488',color:'#fff',borderRadius:5,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>{sendingEmail?'Sending…':'✉ Email Quote'}</button>
               <span style={{width:1,height:20,background:'#E2DDD6',margin:'0 4px'}}/>
@@ -1224,72 +1154,9 @@ export default function AdminProjectPage() {
                       <div style={{fontSize:9,fontWeight:700,letterSpacing:'.6px',textTransform:'uppercase',color:'#065F46'}}>In-Pocket (admin only)</div>
                       <div style={{fontSize:16,fontWeight:700,color:'#27AE60'}}>{fmt(inPocket)}</div>
                       <div style={{fontSize:9,color:'#065F46',opacity:.8,marginTop:1}}>Goods revenue − goods cost (excl. tax/shipping)</div>
-                      <div style={{fontSize:11,fontWeight:700,color: inPocket-projExpTotal>=0?'#0F766E':'#B91C1C',marginTop:3,borderTop:'1px dashed #A7F3D0',paddingTop:3}}>Net after expenses: {fmt(inPocket-projExpTotal)}</div>
                     </div>
                     <button onClick={doPush} disabled={pushing} style={{display:'flex',alignItems:'center',gap:6,background:'#27AE60',color:'#fff',border:'none',padding:'10px 18px',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>⬆ Push to Customer Sheet</button>
                   </div>
-                </div>
-                <div style={{background:'#fff',border:'1px solid #E2DDD6',borderRadius:10,padding:16,marginBottom:16}}>
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
-                    <div style={{fontWeight:700,fontSize:13}}>💸 Project Expenses <span style={{background:'#FEE2E2',color:'#991B1B',fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:700,marginLeft:6}}>Admin only</span></div>
-                    <div style={{fontSize:12,color:'#4A5568'}}>Total: <strong style={{color:'#B91C1C'}}>{fmt(projExpTotal)}</strong></div>
-                  </div>
-                  <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'flex-end',marginBottom:10}}>
-                    <div>
-                      <label style={{display:'block',fontSize:10,fontWeight:700,color:'#4A5568',marginBottom:3}}>Category</label>
-                      {projExpCustomCat ? (
-                        <div style={{display:'flex',gap:4}}>
-                          <input value={projExpCustomVal} onChange={e=>setProjExpCustomVal(e.target.value)} placeholder="CUSTOM CATEGORY" style={{padding:'7px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12,width:150}}/>
-                          <button onClick={()=>{setProjExpCustomCat(false);setProjExpCustomVal('')}} style={{background:'none',border:'1px solid #E2DDD6',borderRadius:5,cursor:'pointer',fontSize:11,padding:'0 8px'}}>✕</button>
-                        </div>
-                      ) : (
-                        <select value={projExpCat} onChange={e=>{ if(e.target.value==='__custom'){setProjExpCustomCat(true)} else setProjExpCat(e.target.value) }} style={{padding:'7px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12,width:190}}>
-                          {projExpCats.map(c=><option key={c} value={c}>{c.replace(/_/g,' ')}</option>)}
-                          <option value="__custom">＋ Custom category…</option>
-                        </select>
-                      )}
-                    </div>
-                    <div style={{flex:1,minWidth:150}}>
-                      <label style={{display:'block',fontSize:10,fontWeight:700,color:'#4A5568',marginBottom:3}}>Description</label>
-                      <input value={projExpDesc} onChange={e=>setProjExpDesc(e.target.value)} placeholder="e.g. Extra brackets from Home Depot" style={{width:'100%',padding:'7px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12,boxSizing:'border-box'}}/>
-                    </div>
-                    <div>
-                      <label style={{display:'block',fontSize:10,fontWeight:700,color:'#4A5568',marginBottom:3}}>Cost $</label>
-                      <input type="number" value={projExpCost} onChange={e=>setProjExpCost(e.target.value===''?'':Number(e.target.value))} style={{width:90,padding:'7px 9px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/>
-                    </div>
-                    <div>
-                      <label style={{display:'block',fontSize:10,fontWeight:700,color:'#4A5568',marginBottom:3}}>Date</label>
-                      <input type="date" value={projExpDate} onChange={e=>setProjExpDate(e.target.value)} style={{padding:'6px 8px',border:'1px solid #E2DDD6',borderRadius:5,fontSize:12}}/>
-                    </div>
-                    <button onClick={addProjExpense} disabled={projExpBusy} style={{background:'#B91C1C',color:'#fff',border:'none',padding:'8px 16px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer'}}>{projExpBusy?'Adding…':'＋ Add'}</button>
-                  </div>
-                  {projExpenses.length ? (
-                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
-                      <thead><tr>
-                        <th style={{textAlign:'left',padding:'5px 8px',fontSize:10,color:'#4A5568',borderBottom:'2px solid #E2DDD6'}}>Date</th>
-                        <th style={{textAlign:'left',padding:'5px 8px',fontSize:10,color:'#4A5568',borderBottom:'2px solid #E2DDD6'}}>Category</th>
-                        <th style={{textAlign:'left',padding:'5px 8px',fontSize:10,color:'#4A5568',borderBottom:'2px solid #E2DDD6'}}>Description</th>
-                        <th style={{textAlign:'right',padding:'5px 8px',fontSize:10,color:'#4A5568',borderBottom:'2px solid #E2DDD6'}}>Cost</th>
-                        <th style={{borderBottom:'2px solid #E2DDD6'}}></th>
-                      </tr></thead>
-                      <tbody>
-                        {projExpenses.map((e:any)=>(
-                          <tr key={e.id}>
-                            <td style={{padding:'6px 8px',borderBottom:'1px solid #F1EDE6',whiteSpace:'nowrap'}}>{e.expense_date}</td>
-                            <td style={{padding:'6px 8px',borderBottom:'1px solid #F1EDE6'}}><span style={{background:'#F7F4EF',padding:'2px 8px',borderRadius:8,fontSize:10,fontWeight:700,color:'#4A5568'}}>{String(e.category||'').replace(/_/g,' ')}</span></td>
-                            <td style={{padding:'6px 8px',borderBottom:'1px solid #F1EDE6'}}>{e.description}</td>
-                            <td style={{padding:'6px 8px',borderBottom:'1px solid #F1EDE6',textAlign:'right',fontWeight:700,color:'#B91C1C'}}>{fmt(Number(e.cost))}</td>
-                            <td style={{padding:'6px 4px',borderBottom:'1px solid #F1EDE6',textAlign:'right'}}>
-                              <button onClick={()=>deleteProjExpense(e.id)} style={{background:'none',border:'none',color: projExpDelConfirm===e.id?'#B91C1C':'#9AA5B4',cursor:'pointer',fontSize:11,fontWeight:projExpDelConfirm===e.id?700:400}}>{projExpDelConfirm===e.id?'Confirm?':'✕'}</button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <div style={{fontSize:11,color:'#9AA5B4',padding:'4px 0'}}>No expenses logged for this project yet.</div>
-                  )}
-                  <div style={{fontSize:10,color:'#9AA5B4',marginTop:8}}>These are deducted from In-Pocket to give the true net profit for this project, and roll up into the Reports page.</div>
                 </div>
                 <div style={{background:'#FEF3C7',border:'1px solid rgba(245,158,11,.3)',borderRadius:8,padding:'11px 15px',fontSize:12,color:'#92400E',marginBottom:16,lineHeight:1.7}}>
                   Enter your actual purchase cost and a multiplication factor. Quote = Cost × Factor. Motors have their own factors. Hit <strong>Push</strong> to publish to the project sheet and customer view.

@@ -6,16 +6,8 @@ export async function GET(req: Request) {
   const auth = await requireAdmin()
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
 
-  const { searchParams } = new URL(req.url)
-  const projectId = searchParams.get('projectId')
-  const scope = searchParams.get('scope') // 'org' → only company-level (no project)
-
   const supabase = createAdminClient()
-  let q = supabase.from('expenses').select('*').order('expense_date', { ascending: false })
-  if (projectId) q = q.eq('project_id', projectId)
-  else if (scope === 'org') q = q.is('project_id', null)
-
-  const { data, error } = await q
+  const { data, error } = await supabase.from('expenses').select('*').order('expense_date', { ascending: false })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }
