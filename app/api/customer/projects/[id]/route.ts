@@ -29,10 +29,22 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
   // shows, but only the sell-side numbers (cost_per_sqm * factor) ever reach the
   // client below — raw my_cost_per_sqm/my_cost_per_unit are never exposed here.
   const admin = createAdminClient()
-  const [{ data: products }, { data: motors }] = await Promise.all([
+  const [{ data: productsRaw }, { data: motorsRaw }, { data: pProductsOv }, { data: pMotorsOv }] = await Promise.all([
     admin.from('products').select('name, my_cost_per_sqm, factor').eq('is_active', true),
     admin.from('motors').select('name, my_cost_per_unit, factor').eq('is_active', true),
+    admin.from('project_products').select('*').eq('project_id', params.id),
+    admin.from('project_motors').select('*').eq('project_id', params.id),
   ])
+  const opMap = new Map((pProductsOv || []).map((o: any) => [o.name, o]))
+  const omMap = new Map((pMotorsOv || []).map((o: any) => [o.name, o]))
+  const products = (productsRaw || []).map((p: any) => {
+    const o = opMap.get(p.name)
+    return o ? { ...p, my_cost_per_sqm: Number(o.my_cost_per_sqm), factor: Number(o.factor) } : p
+  })
+  const motors = (motorsRaw || []).map((m: any) => {
+    const o = omMap.get(m.name)
+    return o ? { ...m, my_cost_per_unit: Number(o.my_cost_per_unit), factor: Number(o.factor) } : m
+  })
 
   const CONV = 0.00064516
   const sqm = (w: any, h: any) => parseFloat(w || 0) * parseFloat(h || 0) * CONV

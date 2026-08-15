@@ -36,21 +36,41 @@ export async function POST(req: Request) {
     if (rowInsErr) return NextResponse.json({ error: 'Saving rows failed: ' + rowInsErr.message }, { status: 500 })
   }
 
-  // Persist product/motor pricing edits — run in parallel instead of one-at-a-time,
-  // and actually check for errors instead of ignoring them.
+  // Persist product/motor pricing as PROJECT-SCOPED OVERRIDES ONLY — never
+  // write to the global products/motors tables. This is the fix for pricing
+  // leaking between projects. A row is written only if it differs from the
+  // global default; if it now matches, any existing override is removed.
   if (products?.length) {
-    const results = await Promise.all(products.map((p: any) =>
-      sb.from('products').update({ my_cost_per_sqm: p.my_cost_per_sqm, factor: p.factor }).eq('id', p.id)
-    ))
-    const failed = results.find(r => r.error)
-    if (failed?.error) return NextResponse.json({ error: 'Saving a product price failed: ' + failed.error.message }, { status: 500 })
+    const { data: defaults } = await sb.from('products').select('name, my_cost_per_sqm, factor')
+    const defMap = new Map((defaults || []).map((d: any) => [d.name, d]))
+    for (const p of products) {
+      const def = defMap.get(p.name)
+      const differs = !def || Number(def.my_cost_per_sqm) !== Number(p.my_cost_per_sqm) || Number(def.factor) !== Number(p.factor)
+      if (differs) {
+        const { error } = await sb.from('project_products').upsert(
+          { project_id: projectId, name: p.name, my_cost_per_sqm: p.my_cost_per_sqm, factor: p.factor },
+          { onConflict: 'project_id,name' })
+        if (error) return NextResponse.json({ error: 'Saving a project product price failed: ' + error.message }, { status: 500 })
+      } else {
+        await sb.from('project_products').delete().eq('project_id', projectId).eq('name', p.name)
+      }
+    }
   }
   if (motors?.length) {
-    const results = await Promise.all(motors.map((m: any) =>
-      sb.from('motors').update({ my_cost_per_unit: m.my_cost_per_unit, factor: m.factor }).eq('id', m.id)
-    ))
-    const failed = results.find(r => r.error)
-    if (failed?.error) return NextResponse.json({ error: 'Saving a motor price failed: ' + failed.error.message }, { status: 500 })
+    const { data: defaults } = await sb.from('motors').select('name, my_cost_per_unit, factor')
+    const defMap = new Map((defaults || []).map((d: any) => [d.name, d]))
+    for (const m of motors) {
+      const def = defMap.get(m.name)
+      const differs = !def || Number(def.my_cost_per_unit) !== Number(m.my_cost_per_unit) || Number(def.factor) !== Number(m.factor)
+      if (differs) {
+        const { error } = await sb.from('project_motors').upsert(
+          { project_id: projectId, name: m.name, my_cost_per_unit: m.my_cost_per_unit, factor: m.factor },
+          { onConflict: 'project_id,name' })
+        if (error) return NextResponse.json({ error: 'Saving a project motor price failed: ' + error.message }, { status: 500 })
+      } else {
+        await sb.from('project_motors').delete().eq('project_id', projectId).eq('name', m.name)
+      }
+    }
   }
 
   // Save grand total so invoices can use it

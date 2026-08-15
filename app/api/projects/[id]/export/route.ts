@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 import { requireAdmin } from '@/lib/require-admin'
 import * as XLSX from 'xlsx'
+import { getMergedPricing } from '@/lib/project-pricing'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,13 +24,13 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     .from('projects').select('*').eq('id', params.id).single()
   if (pErr || !project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
 
-  const [{ data: rows }, { data: cfgRow }, { data: fees }, { data: products }, { data: motors }] = await Promise.all([
+  const [{ data: rows }, { data: cfgRow }, { data: fees }, pricing] = await Promise.all([
     supabase.from('project_rows').select('*').eq('project_id', params.id).order('sort_order'),
     supabase.from('project_config').select('*').eq('project_id', params.id).maybeSingle(),
     supabase.from('project_fees').select('*').eq('project_id', params.id),
-    supabase.from('products').select('*'),
-    supabase.from('motors').select('*'),
+    getMergedPricing(params.id),
   ])
+  const { products, motors } = pricing
 
   let customerName = ''
   if (project.customer_id) {

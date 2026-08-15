@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
+import { getMergedPricingForAllProjects } from '@/lib/project-pricing'
 import { requireAdmin } from '@/lib/require-admin'
 
 const CONV = 0.00064516
@@ -119,14 +120,16 @@ export async function GET(req: Request) {
     feesByProject[f.project_id].push(f)
   }
 
+  const mergedPricingFor = await getMergedPricingForAllProjects()
   const breakdownByProject = new Map<string, ReturnType<typeof computeProjectBreakdown>>()
   for (const projectId of Array.from(projectIdsWithPayments)) {
+    const { products: mp, motors: mm } = mergedPricingFor(projectId)
     const breakdown = computeProjectBreakdown(
       rowsByProject[projectId] || [],
       configByProject.get(projectId),
       feesByProject[projectId] || [],
-      products || [],
-      motors || []
+      mp,
+      mm
     )
     breakdownByProject.set(projectId, breakdown)
   }

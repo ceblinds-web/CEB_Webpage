@@ -29,10 +29,22 @@ export default async function QuotePage({ params }: { params: { id: string } }) 
   // factor=5 for every row regardless of blind type, and never accounted for
   // motors at all, so this public-facing total could silently disagree with
   // what the project actually charges.
-  const [{ data: products }, { data: motors }] = await Promise.all([
+  const [{ data: productsRaw }, { data: motorsRaw }, { data: pProductsOv }, { data: pMotorsOv }] = await Promise.all([
     supabase.from('products').select('name, my_cost_per_sqm, factor').eq('is_active', true),
     supabase.from('motors').select('name, my_cost_per_unit, factor').eq('is_active', true),
+    supabase.from('project_products').select('*').eq('project_id', params.id),
+    supabase.from('project_motors').select('*').eq('project_id', params.id),
   ])
+  const opMap = new Map((pProductsOv || []).map((o: any) => [o.name, o]))
+  const omMap = new Map((pMotorsOv || []).map((o: any) => [o.name, o]))
+  const products = (productsRaw || []).map((p: any) => {
+    const o = opMap.get(p.name)
+    return o ? { ...p, my_cost_per_sqm: Number(o.my_cost_per_sqm), factor: Number(o.factor) } : p
+  })
+  const motors = (motorsRaw || []).map((m: any) => {
+    const o = omMap.get(m.name)
+    return o ? { ...m, my_cost_per_unit: Number(o.my_cost_per_unit), factor: Number(o.factor) } : m
+  })
   const getProd = (name: string) => (products || []).find((p: any) => p.name === name) || { my_cost_per_sqm: 0, factor: 0 }
   const getMotor = (name: string) => (motors || []).find((m: any) => m.name === name) || { my_cost_per_unit: 0, factor: 0 }
   const blindsQ = (r: any) => Math.round(sqm(r.width_in, r.height_in) * getProd(r.blind_type).my_cost_per_sqm * getProd(r.blind_type).factor * 100) / 100 * (r.qty || 1)

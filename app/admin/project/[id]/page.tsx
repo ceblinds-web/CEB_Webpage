@@ -24,8 +24,8 @@ const OPTIONAL_COLS = [
 
 type Row = { id:string; is_section:boolean; section_name?:string; blind_type:string; control:string; location:string; fabric:string; valance:string; bottom_rail:string; mount:string; width_in:number|''; height_in:number|''; qty:number; remark:string; priced?:boolean }
 type Config = { tax_pct:number; shipping_pct:number; discount_pct:number; discount_reason:string; installation:number }
-type Product = { id:string; name:string; my_cost_per_sqm:number; factor:number }
-type Motor = { id:string; name:string; my_cost_per_unit:number; factor:number }
+type Product = { id:string; name:string; my_cost_per_sqm:number; factor:number; isOverride?: boolean; defaultCost?: number; defaultFactor?: number }
+type Motor = { id:string; name:string; my_cost_per_unit:number; factor:number; isOverride?: boolean; defaultCost?: number; defaultFactor?: number }
 type Fabric = { id:string; code:string; series:string; vendor:string|null; category:string; cost_cordless:number; cost_beadchain:number; is_active:boolean }
 type Fee = { id?:string; label:string; fee_type:'flat'|'pct'; value:number }
 type Invoice = { id:string; invoice_number:string; status:string; total_amount:number|null; sequence_num:number|null; invoice_type:string|null; pct_of_total:number|null; payment_method:string|null; square_surcharge:number|null; fully_paid_at:string|null; created_at:string }
@@ -124,8 +124,9 @@ export default function AdminProjectPage() {
       if (d.customer_id) setExpandedCust(prev=>({...prev,[d.customer_id]:true}))
       setLoadError(false)
     }).catch(()=>setLoadError(true))
-    fetch('/api/products', { cache:'no-store' }).then(r=>r.json()).then(setProducts).catch(()=>setProducts([]))
-    fetch('/api/motors', { cache:'no-store' }).then(r=>r.json()).then(setMotors).catch(()=>setMotors([]))
+    fetch(`/api/projects/${id}/pricing`, { cache:'no-store' }).then(r=>r.json()).then(d=>{
+      setProducts(d.products||[]); setMotors(d.motors||[])
+    }).catch(()=>{ setProducts([]); setMotors([]) })
     fetch('/api/customers', { cache:'no-store' }).then(r=>r.json()).then(setCustomers).catch(()=>setCustomers([]))
     // Invoices/grievances/emails load in parallel but don't gate the initial render —
     // the Sheet tab (the default) doesn't need any of them.
@@ -295,10 +296,23 @@ export default function AdminProjectPage() {
   // Persists immediately (on blur) instead of only during Push — editing a price and
   // navigating away without pushing was silently losing the edit before.
   const saveProductField = async (pid: string, field: string, val: number) => {
+    const p = products.find(x=>x.id===pid); if (!p) return
     try {
-      const res = await fetch(`/api/products/${pid}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ [field]: val }) })
-      if (!res.ok) showToast('Could not save that price — it may not have persisted','err')
+      const fld = field==='factor' ? 'factor' : 'cost'
+      const res = await fetch(`/api/projects/${id}/pricing`, { method:'PATCH', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ type:'product', name:p.name, field:fld, value: val }) })
+      const d = await res.json().catch(()=>({}))
+      if (!res.ok) { showToast(d.error||'Could not save that price','err'); return }
+      setProducts(prev=>prev.map(x=>x.id===pid?{...x, isOverride:d.isOverride, my_cost_per_sqm: field==='my_cost_per_sqm'?val:x.my_cost_per_sqm, factor: field==='factor'?val:x.factor}:x))
     } catch { showToast('Network error saving price','err') }
+  }
+  const resetProductPricing = async (p:any) => {
+    try {
+      const res = await fetch(`/api/projects/${id}/pricing`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type:'product', name:p.name }) })
+      if (!res.ok) { showToast('Reset failed','err'); return }
+      setProducts(prev=>prev.map(x=>x.id===p.id?{...x, my_cost_per_sqm:x.defaultCost??x.my_cost_per_sqm, factor:x.defaultFactor??x.factor, isOverride:false}:x))
+      showToast('Reset to default pricing','ok')
+    } catch { showToast('Network error','err') }
   }
   const addProduct = async () => {
     if (!newProdName.trim()) return showToast('Enter a product name','err')
@@ -322,10 +336,23 @@ export default function AdminProjectPage() {
     markDirty()
   }
   const saveMotorField = async (mid: string, field: string, val: number) => {
+    const m = motors.find(x=>x.id===mid); if (!m) return
     try {
-      const res = await fetch(`/api/motors/${mid}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ [field]: val }) })
-      if (!res.ok) showToast('Could not save that price — it may not have persisted','err')
+      const fld = field==='factor' ? 'factor' : 'cost'
+      const res = await fetch(`/api/projects/${id}/pricing`, { method:'PATCH', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ type:'motor', name:m.name, field:fld, value: val }) })
+      const d = await res.json().catch(()=>({}))
+      if (!res.ok) { showToast(d.error||'Could not save that price','err'); return }
+      setMotors(prev=>prev.map(x=>x.id===mid?{...x, isOverride:d.isOverride, my_cost_per_unit: field==='my_cost_per_unit'?val:x.my_cost_per_unit, factor: field==='factor'?val:x.factor}:x))
     } catch { showToast('Network error saving price','err') }
+  }
+  const resetMotorPricing = async (m:any) => {
+    try {
+      const res = await fetch(`/api/projects/${id}/pricing`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type:'motor', name:m.name }) })
+      if (!res.ok) { showToast('Reset failed','err'); return }
+      setMotors(prev=>prev.map(x=>x.id===m.id?{...x, my_cost_per_unit:x.defaultCost??x.my_cost_per_unit, factor:x.defaultFactor??x.factor, isOverride:false}:x))
+      showToast('Reset to default pricing','ok')
+    } catch { showToast('Network error','err') }
   }
   const addMotor = async () => {
     if (!newMotorName.trim()) return showToast('Enter a name','err')
@@ -442,7 +469,7 @@ export default function AdminProjectPage() {
     }))
     try {
       const res = await fetch('/api/save', { method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ projectId:id, config, fees, rows:toSave }) })
+        body: JSON.stringify({ projectId:id, config, fees, rows:toSave, products, motors }) })
       const text = await res.text()
       let data:any = {}
       try { data = text?JSON.parse(text):{} } catch { showToast('Server returned an unexpected response. Status '+res.status,'err'); return }
@@ -1368,9 +1395,17 @@ export default function AdminProjectPage() {
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:10,padding:'14px 16px'}}>
                     {products.map(p=>(
                       <div key={p.id} style={{border:'1px solid #E2DDD6',borderRadius:8,overflow:'hidden'}}>
-                        <div style={{background:'#F7F4EF',padding:'8px 11px',fontSize:11,fontWeight:700,borderBottom:'1px solid #E2DDD6',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                          {p.name}
-                          <button onClick={()=>confirmOrAsk('prod:'+p.id,()=>delProduct(p.id))} style={{background:pendingDelete==='prod:'+p.id?'#E53E3E':'none',border:'none',color:pendingDelete==='prod:'+p.id?'#fff':'#E53E3E',cursor:'pointer',fontSize:pendingDelete==='prod:'+p.id?10:12,fontWeight:pendingDelete==='prod:'+p.id?700:400,opacity:1,padding:pendingDelete==='prod:'+p.id?'2px 6px':0,borderRadius:4}}>{pendingDelete==='prod:'+p.id?'Confirm?':'✕'}</button>
+                        <div style={{background: p.isOverride?'#FEF3C7':'#F7F4EF',padding:'8px 11px',fontSize:11,fontWeight:700,borderBottom:'1px solid #E2DDD6'}}>
+                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                            <span>{p.name}</span>
+                            <button onClick={()=>confirmOrAsk('prod:'+p.id,()=>delProduct(p.id))} style={{background:pendingDelete==='prod:'+p.id?'#E53E3E':'none',border:'none',color:pendingDelete==='prod:'+p.id?'#fff':'#E53E3E',cursor:'pointer',fontSize:pendingDelete==='prod:'+p.id?10:12,fontWeight:pendingDelete==='prod:'+p.id?700:400,opacity:1,padding:pendingDelete==='prod:'+p.id?'2px 6px':0,borderRadius:4}}>{pendingDelete==='prod:'+p.id?'Confirm?':'✕'}</button>
+                          </div>
+                          {p.isOverride && (
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:4}}>
+                              <span style={{fontSize:9,fontWeight:700,color:'#92400E'}}>📌 Project pricing</span>
+                              <button onClick={()=>resetProductPricing(p)} style={{fontSize:9,background:'none',border:'none',color:'#92400E',textDecoration:'underline',cursor:'pointer',fontWeight:600}}>↺ Reset to default</button>
+                            </div>
+                          )}
                         </div>
                         <div style={{padding:'9px 11px'}}>
                           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
@@ -1406,9 +1441,17 @@ export default function AdminProjectPage() {
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:10,padding:'14px 16px'}}>
                     {motors.map(m=>(
                       <div key={m.id} style={{border:'1px solid #E2DDD6',borderRadius:8,overflow:'hidden'}}>
-                        <div style={{background:'#F5F0FF',padding:'8px 11px',fontSize:11,fontWeight:700,borderBottom:'1px solid #E2DDD6',color:'#7C3AED',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                          {m.name}
-                          <button onClick={()=>confirmOrAsk('motor:'+m.id,()=>delMotor(m.id))} style={{background:pendingDelete==='motor:'+m.id?'#E53E3E':'none',border:'none',color:pendingDelete==='motor:'+m.id?'#fff':'#E53E3E',cursor:'pointer',fontSize:pendingDelete==='motor:'+m.id?10:12,fontWeight:pendingDelete==='motor:'+m.id?700:400,opacity:1,padding:pendingDelete==='motor:'+m.id?'2px 6px':0,borderRadius:4}}>{pendingDelete==='motor:'+m.id?'Confirm?':'✕'}</button>
+                        <div style={{background: m.isOverride?'#FEF3C7':'#F5F0FF',padding:'8px 11px',fontSize:11,fontWeight:700,borderBottom:'1px solid #E2DDD6',color:'#7C3AED'}}>
+                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                            <span>{m.name}</span>
+                            <button onClick={()=>confirmOrAsk('motor:'+m.id,()=>delMotor(m.id))} style={{background:pendingDelete==='motor:'+m.id?'#E53E3E':'none',border:'none',color:pendingDelete==='motor:'+m.id?'#fff':'#E53E3E',cursor:'pointer',fontSize:pendingDelete==='motor:'+m.id?10:12,fontWeight:pendingDelete==='motor:'+m.id?700:400,opacity:1,padding:pendingDelete==='motor:'+m.id?'2px 6px':0,borderRadius:4}}>{pendingDelete==='motor:'+m.id?'Confirm?':'✕'}</button>
+                          </div>
+                          {m.isOverride && (
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:4}}>
+                              <span style={{fontSize:9,fontWeight:700,color:'#92400E'}}>📌 Project pricing</span>
+                              <button onClick={()=>resetMotorPricing(m)} style={{fontSize:9,background:'none',border:'none',color:'#92400E',textDecoration:'underline',cursor:'pointer',fontWeight:600}}>↺ Reset to default</button>
+                            </div>
+                          )}
                         </div>
                         <div style={{padding:'9px 11px'}}>
                           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
